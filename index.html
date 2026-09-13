@@ -1,0 +1,2682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hidden Map — Treasure Hunt</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pirata+One&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #12161c;
+    --panel: #1b212a;
+    --panel-2: #222a35;
+    --border: #333d4a;
+    --text: #e8ecf1;
+    --muted: #8a94a3;
+    --accent: #4fc3a1;
+    --accent-2: #e0a84f;
+    --danger: #e0604f;
+    --unknown: #2a323d;
+    --gap: #12161c;
+    --land: #3a4453;
+    --swamp: #3f5a48;
+    --hole: #383053;
+    --trap: #5d3a3a;
+    --armory: #6b4423;
+    --treasure: #6b5a2a;
+    --exit-glow: #4fc3a1;
+    --wall-unspecified: #d8dee6;
+    --wall-destructible: #ffdd55;
+    --wall-nondestructible: #ff5d5d;
+    --wall-checked-external: #5f8fd6;
+    --wall-checked-exit: #d9a441;
+    --parchment: #e8d9b5;
+    --ocean: #1477b0;
+    --river: #2a5a78;
+    --mouth: var(--ocean);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 12px;
+  }
+  h1 { font-size: 18px; margin: 4px 0 12px; text-align: center; color: var(--accent); }
+  h2 { font-size: 14px; margin: 0 0 8px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .app { max-width: 980px; margin: 0 auto; }
+  .setup-screen, .gameover-screen {
+    background: var(--panel); border-radius: 12px; padding: 24px; text-align: center; max-width: 480px; margin: 40px auto;
+  }
+  .setup-screen p, .gameover-screen p { color: var(--muted); line-height: 1.5; }
+  .corner-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 160px; margin: 16px auto; }
+  .corner-btn {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; color: var(--text);
+    padding: 16px; cursor: pointer; font-size: 18px;
+  }
+  .corner-btn.selected, .corner-btn:hover { border-color: var(--accent); background: #223028; }
+  .difficulty-row, .size-row { display: flex; gap: 8px; justify-content: center; margin: 12px 0; flex-wrap: wrap; }
+  .diff-btn, .size-btn {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; color: var(--text);
+    padding: 8px 16px; cursor: pointer;
+  }
+  .diff-btn.selected, .size-btn.selected { border-color: var(--accent-2); background: #3a3020; }
+  .setup-hint { font-size: 11px; color: var(--muted); margin: -6px 0 4px; line-height: 1.4; }
+  .primary-btn {
+    background: var(--accent); color: #0a1410; border: none; border-radius: 8px;
+    padding: 10px 24px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 12px;
+  }
+  .primary-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .secondary-btn {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 14px; font-size: 13px; cursor: pointer;
+  }
+
+  .app { max-width: none; margin: 0; padding: 0 24px 24px; }
+  .app > h1 { text-align: left; margin-left: 4px; }
+  .rules-screen, .setup-screen, .gameover-screen { margin-left: auto; margin-right: auto; }
+
+  /* ---- Desktop 3-column layout: My Field | Opponent's Map | Puzzle Fragments ---- */
+  .game-layout {
+    display: grid;
+    grid-template-columns: minmax(230px, 340px) minmax(360px, 620px) minmax(320px, 1fr);
+    gap: 20px;
+    align-items: start;
+    justify-content: start;
+    margin-top: 12px;
+  }
+  .col-left, .col-right { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 12px; align-self: start; }
+  .side-panel { background: var(--panel); border-radius: 12px; padding: 14px; }
+  .side-panel h2 { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+  .side-panel h2 .sub { font-weight: 400; text-transform: none; letter-spacing: 0; font-size: 11px; color: var(--muted); }
+  .progress-wrap { margin-top: 10px; }
+  .progress-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+  .progress-row .pct { font-weight: 700; }
+  .progress-row .pct.fill-ai { color: var(--danger); }
+  .progress-row .pct.fill-human { color: var(--accent); }
+  .progress-bar-track { background: var(--panel-2); border-radius: 6px; height: 8px; overflow: hidden; margin-top: 4px; }
+  .progress-bar-fill { height: 100%; width: 0%; transition: width 0.3s ease; }
+  .progress-bar-fill.fill-ai { background: var(--danger); }
+  .progress-bar-fill.fill-human { background: var(--accent); }
+  .ai-last-action-text { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.45; padding-top: 10px; border-top: 1px solid var(--border); }
+  .field-brief { font-size: 11px; color: var(--muted); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; line-height: 1.4; }
+  .field-brief-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text); margin-bottom: 2px; }
+  .field-brief b { color: var(--text); font-weight: 600; }
+  .puzzle-fragments-list { display: flex; flex-wrap: wrap; gap: 16px; align-content: flex-start; position: relative; min-height: 260px; height: min(calc(100vh - 210px), 600px); max-height: calc(100vh - 120px); overflow: auto; resize: both; padding: 6px; border: 1px dashed var(--border); border-radius: 8px; background: color-mix(in srgb, var(--panel-2) 40%, transparent); }
+  .puzzle-fragments-list .quadrant { flex: 0 0 auto; touch-action: none; }
+  .quadrant-title { touch-action: none; }
+  .puzzle-panel-empty { font-size: 12px; color: var(--muted); text-align: center; padding: 24px 8px; }
+  .log-panel-wide { margin-top: 20px; max-width: 1900px; }
+  .col-mid .controls { margin: 16px auto 0; }
+  .puzzle-panel-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
+  .puzzle-panel-header-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+  .merge-toggle-btn {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; color: var(--text);
+    font-size: 11px; font-weight: 600; padding: 6px 10px; cursor: pointer; white-space: nowrap;
+  }
+  .merge-toggle-btn.active { background: var(--accent); color: #06140f; border-color: var(--accent); }
+  .merge-toggle-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .merge-hint { font-size: 11px; color: var(--accent-2); margin: 4px 0 8px; line-height: 1.4; }
+  @media (max-width: 1080px) {
+    .game-layout { grid-template-columns: 1fr; }
+    .col-left, .col-right { position: static; }
+  }
+
+  /* ---- Cells the AI hasn't discovered yet on my own field, faded but still visible ---- */
+  .cell.ai-unknown { opacity: 0.32; }
+
+  /* ---- Route trail leading up to the Hole you fell into (main map, while disoriented) ---- */
+  .cell.trail-cell { outline: 2px solid var(--accent); outline-offset: -3px; }
+  .cell.trail-end { outline: 2px solid var(--danger); outline-offset: -3px; }
+  .trail-arrow { position: absolute; font-size: 39px; color: var(--accent); z-index: 4; pointer-events: none; text-shadow: 0 0 3px #000, 0 0 3px #000; font-weight: 900; }
+  .trail-arrow.dir-UP { top: 3px; left: 50%; transform: translateX(-50%); }
+  .trail-arrow.dir-DOWN { bottom: 3px; left: 50%; transform: translateX(-50%); }
+  .trail-arrow.dir-LEFT { left: 3px; top: 50%; transform: translateY(-50%); }
+  .trail-arrow.dir-RIGHT { right: 3px; top: 50%; transform: translateY(-50%); }
+  .trail-num { position: absolute; font-size: 11px; font-weight: 800; line-height: 1.3;
+    color: var(--accent); background: rgba(0,0,0,0.6); border-radius: 4px; padding: 0 4px; z-index: 6; pointer-events: none; }
+  .trail-num.trail-num-end { color: var(--danger); }
+  /* Tucked right beside the arrow it belongs to, instead of the top-left corner (the cell's
+     own type label already lives there). */
+  .trail-num.trail-num-UP { top: 3px; left: calc(50% + 11px); }
+  .trail-num.trail-num-DOWN { bottom: 3px; left: calc(50% + 11px); }
+  .trail-num.trail-num-LEFT { left: 3px; top: calc(50% - 24px); }
+  .trail-num.trail-num-RIGHT { right: 3px; top: calc(50% - 24px); }
+  .trail-num.trail-num-fallback { top: 2px; right: 30px; } /* the trail's last cell has no outgoing arrow to sit beside */
+
+  /* ---- Fragment-merge selection highlight (distinct from anchor-source amber) ---- */
+  .cell.merge-source-selected { outline: 2px solid var(--accent); outline-offset: -2px; box-shadow: 0 0 0 4px rgba(79,195,161,0.25); }
+
+  .board-panel { background: var(--panel); border-radius: 12px; padding: 12px; }
+  .board-panel.main-board { padding: 10px; }
+  .grid {
+    display: grid; gap: 3px; aspect-ratio: 1/1; background: var(--gap); position: relative;
+  }
+  .cell {
+    background: var(--unknown); border-radius: 8px; position: relative; overflow: visible;
+  }
+  .cell.land { background: var(--land); }
+  .cell.swamp { background: var(--swamp); }
+  .cell.hole { background: var(--hole); }
+  .cell.trap { background: var(--trap); }
+  .cell.armory {
+    /* A warmer, reddish wood-brown (not the Treasure's golden-olive) plus faint horizontal
+       grain lines, so an Armory tile reads as a wooden crate/chest at a glance. */
+    background: repeating-linear-gradient(180deg, var(--armory) 0px, var(--armory) 7px, #5a3a1c 7px, #5a3a1c 8px);
+  }
+  .cell.treasure { background: var(--treasure); }
+  .cell.river { background: var(--river); }
+  .cell.mouth { background: var(--mouth); }
+  .cell.fragment-gap { background: transparent; }
+  .cell-label {
+    position: absolute; top: 2px; left: 3px; right: auto; text-align: left;
+    pointer-events: none; line-height: 1;
+  }
+  .cell-label .cell-letter { font-size: 13px; font-weight: 800; color: var(--muted); letter-spacing: 0.2px; }
+  /* Opponent's map (the board you actively explore) spells types out in a thinner, pirate-map
+     style face — legible but with some character. The home board stays plain letters. */
+  .cell-label.full-word { right: 3px; max-width: none; }
+  .cell-label.full-word .cell-letter {
+    font-family: 'Pirata One', 'Snell Roundhand', cursive, serif;
+    font-weight: 400; font-size: 22.2px; line-height: 1.05; white-space: normal; word-break: break-word;
+    color: var(--parchment); letter-spacing: 0.4px;
+  }
+  .cell.land .cell-letter, .cell.swamp .cell-letter, .cell.hole .cell-letter,
+  .cell.trap .cell-letter, .cell.armory .cell-letter, .cell.treasure .cell-letter,
+  .cell.river .cell-letter, .cell.mouth .cell-letter { color: var(--text); }
+  .cell.land .cell-label.full-word .cell-letter, .cell.swamp .cell-label.full-word .cell-letter,
+  .cell.hole .cell-label.full-word .cell-letter, .cell.trap .cell-label.full-word .cell-letter,
+  .cell.armory .cell-label.full-word .cell-letter, .cell.treasure .cell-label.full-word .cell-letter,
+  .cell.river .cell-label.full-word .cell-letter, .cell.mouth .cell-label.full-word .cell-letter { color: var(--parchment); }
+  .cell-icon-corner {
+    position: absolute; bottom: 2px; right: 3px; font-size: 30px; line-height: 1; pointer-events: none;
+  }
+  .cell-icon-corner svg { width: 28px; height: 28px; display: block; }
+  .token {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 52%; height: 52%; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold;
+  }
+  .token svg { width: 62%; height: 62%; display: block; }
+  .token.you { background: var(--accent); color: #06140f; }
+  .token.enemy { background: var(--danger); color: #1a0805; }
+  .token-treasure-badge { position: absolute; bottom: -5px; right: -5px; font-size: 13px; line-height: 1;
+    filter: drop-shadow(0 0 2px rgba(0,0,0,0.7)); }
+  .token-bomb-badge { position: absolute; bottom: -5px; left: -5px; font-size: 13px; line-height: 1;
+    filter: drop-shadow(0 0 2px rgba(0,0,0,0.7)); }
+  /* A brief pop-in on the token and a glowing ring on the cell it landed on — so a teleport
+     (Hole-to-Hole, swept to the Mouth, or dropped into a fresh puzzle Hole) reads as something
+     that just happened, instead of the piece just silently appearing in its new spot. */
+  @keyframes teleportPop {
+    0% { transform: translate(-50%,-50%) scale(0.15); opacity: 0; }
+    45% { transform: translate(-50%,-50%) scale(1.35); opacity: 1; }
+    70% { transform: translate(-50%,-50%) scale(0.9); }
+    100% { transform: translate(-50%,-50%) scale(1); }
+  }
+  .token.teleport-pop { animation: teleportPop 1.1s cubic-bezier(.34,1.56,.64,1); }
+  @keyframes teleportCellFlash {
+    0% { box-shadow: inset 0 0 0 3px var(--accent-2), 0 0 16px 4px var(--accent-2); opacity: 1; }
+    100% { box-shadow: inset 0 0 0 0px transparent, 0 0 0 0 transparent; opacity: 0; }
+  }
+  .cell.teleport-flash::after {
+    content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    animation: teleportCellFlash 1.2s ease-out;
+  }
+  .cell.anchor-target-selected { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .cell.anchor-source-selected { outline: 2px solid var(--accent-2); outline-offset: -2px; }
+  @keyframes anchorFail { 0%,100%{outline-color:var(--danger);} 50%{outline-color:transparent;} }
+  .cell.anchor-fail { outline: 2px solid var(--danger); outline-offset: -2px; animation: anchorFail 0.15s ease-in-out 2; }
+  .cell.clickable-anchor-target:hover { outline: 1px dashed var(--muted); outline-offset: -2px; }
+  .fragment-node.clickable { cursor: pointer; }
+  .fragment-node.clickable:hover { outline: 1px dashed var(--accent-2); outline-offset: -2px; }
+  .status-strip { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .status-chip {
+    flex: 1; background: var(--panel); border-radius: 8px; padding: 7px 6px; text-align: center;
+    font-size: 12px; color: var(--muted);
+  }
+  .status-chip .value.yes { color: var(--accent); }
+  .status-chip .value.no { color: var(--muted); }
+  .legend-toggle {
+    display: block; width: 100%; margin-top: 8px; background: none; border: none; color: var(--muted);
+    font-size: 11px; cursor: pointer; text-align: center; padding: 4px;
+  }
+  .board-footer-row { display: flex; gap: 4px; }
+  .board-footer-row .legend-toggle { flex: 1; margin-top: 8px; }
+  .board-footer-row .legend-toggle.active { color: var(--accent); }
+  .messages { background: var(--panel); border-radius: 12px; padding: 12px; margin-top: 10px; }
+  .messages h2 { margin-bottom: 8px; }
+  .messages-list { max-height: 220px; overflow-y: auto; }
+  .messages .msg { padding: 3px 0; font-size: 12px; border-bottom: 1px solid var(--border); }
+  .messages .msg:first-child { border-bottom: none; }
+  .messages .msg.system { color: var(--muted); font-style: italic; }
+  .messages .msg.important { color: var(--accent-2); font-weight: 600; }
+
+  /* ---- Board area / puzzle fragment layout ---- */
+  .board-area { display: block; }
+  .quadrant { display: flex; flex-direction: column; gap: 3px; }
+  .quadrant-title { font-size: 10px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; display: flex; justify-content: space-between; align-items: center; }
+  .quadrant-title .anchored-badge { color: var(--accent); }
+
+  .turn-indicator { text-align: center; padding: 8px; border-radius: 8px; font-weight: 700; font-size: 13px; margin-bottom: 10px; }
+  .turn-indicator.human { background: #1c3a30; color: var(--accent); }
+  .turn-indicator.ai { background: #3a1c1c; color: var(--danger); }
+
+  .controls { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); gap: 6px; max-width: 220px; margin: 12px auto; }
+  .ctrl-btn {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; color: var(--text);
+    font-size: 20px; padding: 12px; cursor: pointer;
+  }
+  .ctrl-btn:active { background: var(--accent); color: #06140f; }
+  .ctrl-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .ctrl-btn.up { grid-column: 2; grid-row: 1; }
+  .ctrl-btn.left { grid-column: 1; grid-row: 2; }
+  .ctrl-btn.down { grid-column: 2; grid-row: 2; }
+  .ctrl-btn.right { grid-column: 3; grid-row: 2; }
+
+  .hidden { display: none !important; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--muted); margin-top: 8px; }
+  .legend span { display: flex; align-items: center; gap: 3px; }
+  .legend .sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .legend .wl { width: 14px; height: 3px; display: inline-block; }
+  .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+
+  /* ---- Rules preview screen ---- */
+  .rules-screen { background: var(--panel); border-radius: 12px; padding: 20px 18px; max-width: 480px; margin: 12px auto; }
+  .rules-goal { color: var(--text); font-size: 13px; line-height: 1.5; margin: 0 0 16px; }
+  .rules-compare { display: flex; gap: 8px; margin-bottom: 16px; }
+  .compare-card { flex: 1; background: var(--panel-2); border-radius: 10px; padding: 10px; text-align: center; border: 1px solid var(--border); }
+  .compare-card.exit-card { border-color: var(--exit-glow); }
+  .compare-title { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+  .compare-text { font-size: 11px; color: var(--muted); line-height: 1.4; }
+  .rules-icon-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+  .rule-row { display: flex; gap: 10px; align-items: flex-start; background: var(--panel-2); border-radius: 10px; padding: 8px 10px; }
+  .rule-row .rule-ic { font-size: 20px; flex-shrink: 0; line-height: 1.3; }
+  .rule-row .rule-text { font-size: 12px; color: var(--text); line-height: 1.4; }
+  .rule-row .rule-text b { color: var(--accent-2); }
+  .rules-note { font-size: 12px; color: var(--muted); line-height: 1.5; background: var(--panel-2); border-radius: 10px; padding: 10px 12px; margin-bottom: 16px; }
+  .rules-note b { color: var(--text); }
+  .rules-turnrow { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 12px; color: var(--muted); margin-bottom: 16px; }
+  .rules-turnrow .rt-chip { background: var(--panel-2); border-radius: 8px; padding: 6px 10px; font-weight: 600; color: var(--text); }
+  .help-btn {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; color: var(--text);
+    padding: 6px 10px; font-size: 13px; cursor: pointer;
+  }
+
+  /* ---- Real hole-index badge on the home board (own field — index always visible) ---- */
+  .hole-index-badge {
+    position: absolute; bottom: 2px; left: 3px; min-width: 18px; height: 18px; padding: 0 3px;
+    background: rgba(0,0,0,0.45); border: 1px solid var(--accent); border-radius: 5px;
+    color: var(--accent); font-size: 15px; font-weight: 800; line-height: 16px; text-align: center; z-index: 2;
+  }
+  /* ---- Draggable connector handle + arrow overlay for marking Hole-to-Hole routes ---- */
+  .hole-connect-handle {
+    position: absolute; top: 2px; right: 3px; width: 24px; height: 24px; border-radius: 50%;
+    background: var(--panel-2); border: 1px solid var(--accent-2); color: var(--accent-2);
+    font-size: 15px; line-height: 21px; text-align: center; cursor: pointer; z-index: 3;
+    touch-action: manipulation;
+  }
+  .hole-connect-handle.linking { background: var(--accent-2); color: #241a06; }
+  .cell.hole-link-target-hover { outline: 2px dashed var(--accent-2); outline-offset: -2px; }
+  .hole-arrow-overlay { pointer-events: none; overflow: visible; opacity: 0.75; }
+  .hole-arrow-overlay-global {
+    position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 10;
+  }
+  .hole-arrow-overlay line { stroke: var(--text); stroke-width: 2px; }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 50;
+    display: flex; align-items: flex-end; justify-content: center;
+  }
+  .modal-box {
+    background: var(--panel); border-radius: 16px 16px 0 0; padding: 16px; width: 100%; max-width: 480px;
+    max-height: 90vh; overflow-y: auto;
+  }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .modal-note { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.4; }
+
+  /* ---- Generic event modal (popup) ---- */
+  .event-modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 80;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .event-modal-box {
+    background: var(--panel); border-radius: 14px; padding: 20px; width: 100%; max-width: 400px;
+    text-align: center;
+  }
+  .event-modal-icon { font-size: 34px; margin-bottom: 8px; }
+  .event-modal-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; color: var(--text); }
+  .event-modal-message { font-size: 13px; color: var(--muted); line-height: 1.5; margin-bottom: 16px; }
+  .event-modal-checkbox-row {
+    display: flex; align-items: center; gap: 8px; justify-content: center;
+    font-size: 12px; color: var(--muted); margin: -6px 0 16px; cursor: pointer;
+  }
+  .event-modal-checkbox-row input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+  .event-modal-buttons { display: flex; gap: 10px; }
+  .event-modal-buttons button {
+    flex: 1; border: none; border-radius: 10px; padding: 14px 10px; font-size: 15px; font-weight: 700; cursor: pointer;
+  }
+  .event-modal-buttons .em-btn-primary { background: var(--accent); color: #06140f; }
+  .event-modal-buttons .em-btn-secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border) !important; }
+
+  /* ---- Exit marker ---- */
+  .exit-marker { position: absolute; font-size: 30px; line-height: 1; z-index: 4; pointer-events: none;
+    filter: drop-shadow(0 0 3px var(--exit-glow)) drop-shadow(0 0 5px var(--exit-glow)); }
+  .exit-marker-up { top: -15px; left: 50%; transform: translateX(-50%); }
+  .exit-marker-down { bottom: -15px; left: 50%; transform: translateX(-50%); }
+  .exit-marker-left { left: -15px; top: 50%; transform: translateY(-50%); }
+  .exit-marker-right { right: -15px; top: 50%; transform: translateY(-50%); }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>🗺️ Hidden Map — Treasure Hunt</h1>
+
+  <!-- ============ RULES PREVIEW SCREEN ============ -->
+  <div id="rulesScreen" class="rules-screen">
+    <h1 style="margin-top:0;">How to Play</h1>
+    <p class="rules-goal">You explore your opponent's (AI's) hidden field. Find the real Treasure and carry it out through the Exit before the AI does. You take turns, like in chess.</p>
+
+    <div class="rules-turnrow">
+      <span class="rt-chip">You</span> ⇄ <span class="rt-chip">AI</span>
+    </div>
+
+    <div class="rules-compare">
+      <div class="compare-card">
+        <div class="compare-title">🧱 Ordinary wall</div>
+        <div class="compare-text">Turn is NOT spent.<br>Try another direction.</div>
+      </div>
+      <div class="compare-card exit-card">
+        <div class="compare-title">🚪 Exit</div>
+        <div class="compare-text">Turn is spent.<br>Checked: do you have the real Treasure?</div>
+      </div>
+    </div>
+
+    <div class="rules-icon-list">
+      <div class="rule-row"><span class="rule-ic">💧</span><div class="rule-text"><b>Swamp</b> — skips your next turn.</div></div>
+      <div class="rule-row"><span class="rule-ic">🕳️</span><div class="rule-text"><b>Hole</b> — teleports you to another Hole and ends your turn immediately. The cycle is always 1→2→3→4→1, but which physical cell has which number is unknown. You can tag a Hole cell with your own personal label (button on the cell) to track the order yourself.</div></div>
+      <div class="rule-row"><span class="rule-ic">🪤</span><div class="rule-text"><b>Trap</b> — you lose any Treasure(s) you're carrying and your ability to blow up walls.</div></div>
+      <div class="rule-row"><span class="rule-ic">💣</span><div class="rule-text"><b>Armory</b> — grants Bombs: lets you learn a wall's type and blow it up.</div></div>
+      <div class="rule-row"><span class="rule-ic">💰</span><div class="rule-text"><b>Treasure</b> — there are two on the opponent's field: real and fake. You won't know which one you have until you try to leave.</div></div>
+    </div>
+
+    <div class="rules-note">
+      <b>Puzzles:</b> after a Hole you lose your orientation — the board switches to a compact puzzle layout: your known map shrinks into one corner and new cells are drawn as a separate fragment "as you walked it", not on the shared map. Once you work out where it really is, tap "?" on the map, then the fragment cell, to anchor it.
+    </div>
+
+    <button class="primary-btn" id="rulesContinueBtn" style="width:100%;">Continue →</button>
+  </div>
+
+  <!-- ============ SETUP SCREEN ============ -->
+  <div id="setupScreen" class="setup-screen hidden">
+    <p>You explore your opponent's (AI's) hidden field. Find the real Treasure and carry it out through the Exit before the AI does.</p>
+
+    <h2>Choose board size</h2>
+    <div class="size-row" id="sizeRow">
+      <button class="size-btn selected" data-size="5">5 × 5</button>
+      <button class="size-btn" data-size="6">6 × 6</button>
+      <button class="size-btn" data-size="7">7 × 7</button>
+      <button class="size-btn" data-size="8">8 × 8</button>
+    </div>
+
+    <h2>Choose difficulty</h2>
+    <div class="difficulty-row" id="diffRow">
+      <button class="diff-btn selected" data-diff="1">Easy</button>
+      <button class="diff-btn" data-diff="2">Normal</button>
+    </div>
+    <div class="setup-hint" id="diffHint">Easy: the Exit is never on a Hole. Normal: the Exit can be on a Hole, but never on a Treasure.</div>
+
+    <h2>Choose your entry corner on the opponent's field</h2>
+    <div class="corner-picker">
+      <button class="corner-btn" data-corner="0,0">↖</button>
+      <button class="corner-btn" data-corner="0,4">↗</button>
+      <button class="corner-btn" data-corner="4,0">↙</button>
+      <button class="corner-btn" data-corner="4,4">↘</button>
+    </div>
+    <button class="primary-btn" id="startBtn" disabled>Start Game</button>
+  </div>
+
+  <!-- ============ GAME SCREEN ============ -->
+  <div id="gameScreen" class="hidden">
+    <div class="top-bar">
+      <button class="help-btn" id="helpBtn">❔</button>
+      <button class="secondary-btn" id="debugToggle">Debug: off</button>
+      <button class="secondary-btn" id="restartBtn">New Game</button>
+    </div>
+    <div id="turnIndicator" class="turn-indicator human">Your turn</div>
+
+    <div class="status-strip">
+      <span class="status-chip"><span class="ic">💣</span> <span id="statBombs">no</span></span>
+      <span class="status-chip"><span class="ic">💰</span> <span id="statTreasure">no</span></span>
+      <span class="status-chip"><span class="ic">💤</span> <span id="statSkip">no</span></span>
+      <span class="status-chip" title="Moves exploring · moves racing to the Exit"><span class="ic">👣</span> <span id="statMoves">0 · 0</span></span>
+    </div>
+
+    <div class="game-layout" id="gameLayout">
+
+      <!-- ============ LEFT COLUMN: My Field (AI explores this) + AI progress ============ -->
+      <div class="col-left">
+        <div class="side-panel">
+          <h2>My Field <span class="sub">(fully visible — AI explores this)</span></h2>
+          <div class="grid" id="homeGrid"></div>
+          <div class="progress-wrap">
+            <div class="progress-row"><span>AI explored</span><span class="pct fill-ai" id="aiProgressPct">0%</span></div>
+            <div class="progress-bar-track"><div class="progress-bar-fill fill-ai" id="aiProgressFill"></div></div>
+          </div>
+          <div class="ai-last-action-text" id="aiLastAction">AI hasn't moved yet</div>
+          <div class="field-brief">
+            <div class="field-brief-title">What the cells do</div>
+            <div><b>Land</b> — open ground, no effect.</div>
+            <div><b>Swamp</b> — skips your next turn.</div>
+            <div><b>Hole</b> — teleports you along the cycle; disorients you.</div>
+            <div><b>Trap</b> — strips any Treasure and Bombs you're carrying.</div>
+            <div><b>Armory</b> — grants Bombs, for blowing up destructible walls.</div>
+            <div><b>Treasure</b> — pick it up (real or fake — you won't know which).</div>
+            <div><b>River (R#)</b> — ride it toward the Mouth; fight it and you're swept back.</div>
+            <div><b>Mouth (M)</b> — the river's end; safe to stand on.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ MIDDLE COLUMN: Opponent's Map (I explore this) ============ -->
+      <div class="col-mid">
+        <div class="board-panel main-board">
+          <h2>Opponent's Map</h2>
+          <div class="progress-wrap" style="margin-bottom:10px;">
+            <div class="progress-row"><span>You explored</span><span class="pct fill-human" id="humanProgressPct">0%</span></div>
+            <div class="progress-bar-track"><div class="progress-bar-fill fill-human" id="humanProgressFill"></div></div>
+          </div>
+          <div class="board-area" id="boardArea">
+            <div class="grid" id="enemyGrid"></div>
+          </div>
+          <div class="board-footer-row">
+            <button class="legend-toggle" id="legendToggle">ⓘ Legend</button>
+            <button class="legend-toggle" id="eventPopupsToggle">🔔 Event popups: On</button>
+          </div>
+          <div class="legend-box" id="legendBox">
+            <div class="legend">
+              <span><i class="sw" style="background:var(--land)"></i>L land</span>
+              <span><i class="sw" style="background:var(--swamp)"></i>S swamp</span>
+              <span><i class="sw" style="background:var(--hole)"></i>H hole</span>
+              <span><i class="sw" style="background:var(--trap)"></i>T trap</span>
+              <span><i class="sw" style="background:var(--armory)"></i>A armory</span>
+              <span><i class="sw" style="background:var(--treasure)"></i>Tr treasure</span>
+            </div>
+            <div class="legend">
+              <span><i class="wl" style="background:var(--wall-unspecified)"></i>wall (type?)</span>
+              <span><i class="wl" style="background:var(--wall-destructible)"></i>destructible</span>
+              <span><i class="wl" style="background:var(--wall-nondestructible)"></i>non-destructible</span>
+              <span><i class="wl" style="background:var(--wall-checked-external)"></i>outer edge (checked)</span>
+              <span><i class="wl" style="background:var(--wall-checked-exit)"></i>checked for the Exit</span>
+              <span><i class="wl" style="background:var(--exit-glow)"></i>Exit</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="controls" id="controls">
+          <button class="ctrl-btn up" data-dir="UP">↑</button>
+          <button class="ctrl-btn left" data-dir="LEFT">←</button>
+          <button class="ctrl-btn down" data-dir="DOWN">↓</button>
+          <button class="ctrl-btn right" data-dir="RIGHT">→</button>
+        </div>
+      </div>
+
+      <!-- ============ RIGHT COLUMN: Puzzle Fragments ============ -->
+      <div class="col-right">
+        <div class="side-panel">
+          <div class="puzzle-panel-header">
+            <h2 style="margin:0;">Puzzle Fragments</h2>
+            <div class="puzzle-panel-header-btns">
+              <button class="merge-toggle-btn" id="resetLayoutBtn" title="Discard every unresolved puzzle piece except the one you're currently in">↺ Reset layout</button>
+              <button class="merge-toggle-btn" id="mergeToggleBtn">🔗 Merge</button>
+            </div>
+          </div>
+          <div class="merge-hint hidden" id="mergeHint">Merge mode: tap a cell in one fragment, then a cell in another that you believe is the SAME real cell. If you're right, the two fragments combine.</div>
+          <div class="puzzle-fragments-list" id="puzzleQuadrants"></div>
+          <div class="puzzle-panel-empty" id="puzzleEmptyMsg">No unresolved puzzles right now — you're fully oriented.</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="messages log-panel-wide" id="logTab">
+      <h2>Move Log</h2>
+      <div class="messages-list" id="messages"></div>
+    </div>
+  </div>
+
+  <!-- ============ GENERIC EVENT MODAL (popup) ============ -->
+  <div id="eventModal" class="event-modal-overlay hidden">
+    <div class="event-modal-box">
+      <div class="event-modal-icon" id="eventModalIcon"></div>
+      <div class="event-modal-title" id="eventModalTitle"></div>
+      <div class="event-modal-message" id="eventModalMessage"></div>
+      <label class="event-modal-checkbox-row hidden" id="eventModalCheckboxRow">
+        <input type="checkbox" id="eventModalDontShowAgain">
+        <span>Don't show these popups again</span>
+      </label>
+      <div class="event-modal-buttons" id="eventModalButtons"></div>
+    </div>
+  </div>
+
+  <!-- ============ GAME OVER SCREEN ============ -->
+  <div id="gameOverScreen" class="gameover-screen hidden">
+    <h2 id="gameOverTitle" style="font-size:20px;"></h2>
+    <p id="gameOverText"></p>
+    <p id="gameOverStats" style="color:var(--muted); font-size:13px;"></p>
+    <button class="primary-btn" id="playAgainBtn">Play Again</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CORE DOMAIN LOGIC (map generation / validator)
+// ============================================================
+let SIZE = 5; // mutable: set at game start from the size picker (5 or 6)
+const CORNERS = () => [ {r:0,c:0}, {r:0,c:SIZE-1}, {r:SIZE-1,c:0}, {r:SIZE-1,c:SIZE-1} ];
+const DIRVECS = { N:{x:0,y:-1}, S:{x:0,y:1}, E:{x:1,y:0}, W:{x:-1,y:0} };
+const PERP = { N:['E','W'], S:['E','W'], E:['N','S'], W:['N','S'] };
+const DELTA = { UP:[-1,0], DOWN:[1,0], LEFT:[0,-1], RIGHT:[0,1] };
+
+function cellCountsFor(size){
+  // Non-river cell counts only — the river path (see riverLenFor) is carved out of the
+  // remaining cells separately during generation, so these + riverLenFor(size) always
+  // add up to size*size.
+  if (size === 8) return { L:16, S:11, H:10, T:11, A:1, TrR:1, TrF:1 }; // 51 + river(13) = 64
+  if (size === 7) return { L:12, S:8, H:8, T:8, A:1, TrR:1, TrF:1 };  // 39 + river(10) = 49
+  if (size === 6) return { L:8, S:6, H:6, T:6, A:1, TrR:1, TrF:1 };   // 29 + river(7)  = 36
+  return { L:6, S:4, H:4, T:3, A:1, TrR:1, TrF:1 };                   // 20 + river(5)  = 25
+}
+// Individual, independent destructible wall segments (not a connected chain — each can sit
+// anywhere on the interior grid on its own).
+function wallCountFor(size){ return size === 8 ? 16 : size === 7 ? 12 : size === 6 ? 8 : 5; }
+// River length INCLUDING the mouth (M). R-segment count is riverLenFor(size)-1.
+function riverLenFor(size){ return size === 8 ? 13 : size === 7 ? 10 : size === 6 ? 7 : 5; }
+
+function key(r,c){ return r+','+c; }
+function inBounds(r,c){ return r>=0 && r<SIZE && c>=0 && c<SIZE; }
+function randInt(min,maxInclusive){ return Math.floor(Math.random()*(maxInclusive-min+1))+min; }
+function choice(arr){ return arr[randInt(0,arr.length-1)]; }
+function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=randInt(0,i); [arr[i],arr[j]]=[arr[j],arr[i]]; } }
+
+function neighborsOf(r,c){
+  return [
+    {r:r-1,c,dir:'UP'}, {r:r+1,c,dir:'DOWN'}, {r,c:c-1,dir:'LEFT'}, {r,c:c+1,dir:'RIGHT'}
+  ].filter(n=>inBounds(n.r,n.c));
+}
+
+function edgeKeyBetween(r,c,dir){
+  if (dir==='DOWN') return r<SIZE-1 ? `H_${r}_${c}` : null;
+  if (dir==='UP') return r>0 ? `H_${r-1}_${c}` : null;
+  if (dir==='RIGHT') return c<SIZE-1 ? `V_${r}_${c}` : null;
+  if (dir==='LEFT') return c>0 ? `V_${r}_${c-1}` : null;
+  return null;
+}
+function extKey(r,c,dir){ return `EXT_${r}_${c}_${dir}`; }
+function isBorderCell(r,c){ return r===0||c===0||r===SIZE-1||c===SIZE-1; }
+function outwardDirectionsForCell(r,c){
+  const d=[]; if(r===0)d.push('UP'); if(r===SIZE-1)d.push('DOWN'); if(c===0)d.push('LEFT'); if(c===SIZE-1)d.push('RIGHT');
+  return d;
+}
+function segmentToEdgeKey(p,q){
+  if (p.y===q.y){ const y=p.y, x=Math.min(p.x,q.x); if(y===0||y===SIZE) return null; return `H_${y-1}_${x}`; }
+  else { const x=p.x, y=Math.min(p.y,q.y); if(x===0||x===SIZE) return null; return `V_${y}_${x-1}`; }
+}
+function generateIndividualWalls(count, excludeSet){
+  // Every interior edge (between two real cells, never on the outer border) is a candidate,
+  // except edges that run directly across the river's own path — the river can't be dammed.
+  const all = [];
+  for (let r=0; r<SIZE-1; r++) for (let c=0; c<SIZE; c++){ const k=`H_${r}_${c}`; if (!excludeSet || !excludeSet.has(k)) all.push(k); }
+  for (let r=0; r<SIZE; r++) for (let c=0; c<SIZE-1; c++){ const k=`V_${r}_${c}`; if (!excludeSet || !excludeSet.has(k)) all.push(k); }
+  shuffle(all);
+  return all.slice(0, Math.min(count, all.length));
+}
+
+// A self-avoiding orthogonal walk of exactly `length` cells — the river. It can run straight
+// or bend 90° any number of times as it winds through the grid (never a 180° doubling-back,
+// which a self-avoiding walk rules out automatically).
+function generateRiverPath(length){
+  for (let attempt=0; attempt<500; attempt++){
+    const start = { r: randInt(0,SIZE-1), c: randInt(0,SIZE-1) };
+    const path = [start];
+    const visited = new Set([key(start.r,start.c)]);
+    let ok = true;
+    while (path.length < length){
+      const cur = path[path.length-1];
+      const opts = neighborsOf(cur.r,cur.c).filter(n => !visited.has(key(n.r,n.c)));
+      if (!opts.length){ ok=false; break; }
+      shuffle(opts);
+      const nxt = { r: opts[0].r, c: opts[0].c };
+      path.push(nxt);
+      visited.add(key(nxt.r,nxt.c));
+    }
+    if (ok && path.length === length) return path;
+  }
+  // Extremely unlikely fallback for tiny/degenerate grids: a straight line, clipped to bounds.
+  const fallback = [];
+  for (let i=0; i<length && i<SIZE; i++) fallback.push({ r:0, c:i });
+  while (fallback.length < length) fallback.push({ r:0, c:SIZE-1 });
+  return fallback;
+}
+
+// Exit eligibility depends on difficulty:
+//  - Easy (1): Exit is never on a Hole (or a Trap).
+//  - Normal (2): Exit can be on a Hole, but never on a Treasure (or a Trap).
+function isExitEligible(type, difficulty){
+  if (type === 'T') return false;
+  if (type === 'M' || /^R\d+$/.test(type)) return false; // river current makes an Exit here unreliable
+  if (difficulty === 1 && type === 'H') return false;
+  if (difficulty === 2 && (type === 'TrR' || type === 'TrF')) return false;
+  return true;
+}
+
+// The edge keys directly between two consecutive river-path cells — these can never carry a
+// destructible wall, since a wall there would literally dam the river.
+function riverInternalEdges(riverPath){
+  const set = new Set();
+  for (let i=1; i<riverPath.length; i++){
+    const a = riverPath[i-1], b = riverPath[i];
+    const dir = a.r < b.r ? 'DOWN' : a.r > b.r ? 'UP' : a.c < b.c ? 'RIGHT' : 'LEFT';
+    const ek = edgeKeyBetween(a.r, a.c, dir);
+    if (ek) set.add(ek);
+  }
+  return set;
+}
+
+function generateRealMap(difficulty){
+  // Place the river first — it needs a connected path, so its cells are reserved before the
+  // rest of the pool (which has no geometric constraints) fills in around it.
+  const riverLen = riverLenFor(SIZE); // includes the mouth
+  const riverPath = generateRiverPath(riverLen);
+  const riverIndexByCoord = {};
+  riverPath.forEach((p,i) => { riverIndexByCoord[key(p.r,p.c)] = i; });
+
+  const pool=[];
+  for(const [type,count] of Object.entries(cellCountsFor(SIZE))) for(let i=0;i<count;i++) pool.push(type);
+  shuffle(pool);
+  const cells=[]; for(let r=0;r<SIZE;r++){ const row=[]; for(let c=0;c<SIZE;c++) row.push(null); cells.push(row); }
+  riverPath.forEach((p,i) => {
+    const n = riverPath.length - 1; // number of R segments; M sits at index n, right after Rn
+    cells[p.r][p.c] = { r:p.r, c:p.c, type: i===n ? 'M' : ('R'+(i+1)) };
+  });
+  let idx=0;
+  for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){
+    if (!cells[r][c]) cells[r][c] = { r, c, type: pool[idx] !== undefined ? pool[idx++] : 'L' };
+  }
+
+  const holeCells=[];
+  for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++) if(cells[r][c].type==='H') holeCells.push({r,c});
+  shuffle(holeCells);
+  const holeCycle={}, holeIndexByCoord={};
+  holeCells.forEach((coord,i)=>{ const index=i+1; holeCycle[index]=coord; holeIndexByCoord[key(coord.r,coord.c)]=index; });
+  const holeCycleLen = holeCells.length;
+
+  const chainEdges=generateIndividualWalls(wallCountFor(SIZE), riverInternalEdges(riverPath));
+  const chainSet=new Set(chainEdges);
+
+  const borderOptions=[];
+  for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++){
+    if(isBorderCell(r,c) && isExitEligible(cells[r][c].type, difficulty)){
+      for(const dir of outwardDirectionsForCell(r,c)) borderOptions.push({r,c,dir});
+    }
+  }
+  // The Exit itself isn't chosen yet — it stays a null "unrevealed" secret until the player
+  // (or the AI, on the home map) has discovered every cell. See revealExitForMap().
+  const exit = null;
+
+  const findByType=(t)=>{ for(let r=0;r<SIZE;r++) for(let c=0;c<SIZE;c++) if(cells[r][c].type===t) return {r,c}; return null; };
+  const armory=findByType('A'), trueTreasure=findByType('TrR'), fakeTreasure=findByType('TrF');
+
+  return { size:SIZE, cells, chainSet, exit, exitCandidates: borderOptions, holeCycle, holeIndexByCoord, holeCycleLen,
+           armory, trueTreasure, fakeTreasure, riverPath, riverIndexByCoord };
+}
+
+function bfsReachable(map, start, {blockChain=false, avoidCellTypes=[]}={}){
+  const visited=new Set([key(start.r,start.c)]); const queue=[start];
+  while(queue.length){
+    const cur=queue.shift();
+    for(const n of neighborsOf(cur.r,cur.c)){
+      const nk=key(n.r,n.c); if(visited.has(nk)) continue;
+      if(blockChain){ const ek=edgeKeyBetween(cur.r,cur.c,n.dir); if(ek && map.chainSet.has(ek)) continue; }
+      const cellType=map.cells[n.r][n.c].type;
+      if(avoidCellTypes.includes(cellType)) continue;
+      visited.add(nk); queue.push(n);
+    }
+  }
+  return visited;
+}
+
+function validateMap(map, difficulty){
+  const violations=[];
+  for(const corner of CORNERS()){
+    const reach=bfsReachable(map, corner, {blockChain:true});
+    if(!reach.has(key(map.armory.r,map.armory.c))) violations.push('Armory unreachable from a corner without bombs');
+  }
+  const reachNoTrap=bfsReachable(map, map.armory, {blockChain:false, avoidCellTypes:['T']});
+  let chainApproachable=false;
+  for(const ek of map.chainSet){
+    const parts=ek.split('_'); const kind=parts[0], rr=parseInt(parts[1]), cc=parseInt(parts[2]);
+    let a,b;
+    if(kind==='H'){ a={r:rr,c:cc}; b={r:rr+1,c:cc}; } else { a={r:rr,c:cc}; b={r:rr,c:cc+1}; }
+    if(reachNoTrap.has(key(a.r,a.c)) || reachNoTrap.has(key(b.r,b.c))){ chainApproachable=true; break; }
+  }
+  if(!chainApproachable) violations.push('No trap-free path from Armory to the wall');
+  const reachFull=bfsReachable(map, map.armory, {blockChain:false});
+  if(!reachFull.has(key(map.trueTreasure.r,map.trueTreasure.c))) violations.push('True treasure unreachable');
+  if(!reachFull.has(key(map.fakeTreasure.r,map.fakeTreasure.c))) violations.push('Fake treasure unreachable');
+  const viableExits = map.exitCandidates.filter(opt => reachFull.has(key(opt.r,opt.c)));
+  if(!viableExits.length) violations.push('No reachable Exit position exists');
+  return { valid: violations.length===0, violations };
+}
+
+function createValidMap(difficulty, maxAttempts=3000){
+  for(let i=0;i<maxAttempts;i++){ const map=generateRealMap(difficulty); if(validateMap(map, difficulty).valid) return map; }
+  throw new Error('Failed to generate a valid map');
+}
+
+function isFullyKnown(known){
+  for (let r=0;r<SIZE;r++) for (let c=0;c<SIZE;c++) if (known.cells[r][c].type === 'UNKNOWN') return false;
+  return true;
+}
+
+// Picks the Exit's real position, at random among the eligible border cells that are actually
+// reachable — only called once the relevant explorer (human on the enemy map, or the AI on
+// the home map) has discovered every single cell. Before that, map.exit stays null and any
+// EXIT_ATTEMPT can never match it.
+function revealExitForMap(map){
+  if (map.exit) return;
+  const reachFull = bfsReachable(map, map.armory, {blockChain:false});
+  const viable = map.exitCandidates.filter(opt => reachFull.has(key(opt.r,opt.c)));
+  map.exit = choice(viable.length ? viable : map.exitCandidates);
+}
+
+// Checks whether either explorer has just finished mapping their target 100%, and if so,
+// reveals that map's Exit and announces it. Safe to call after every render — reveal only
+// ever happens once per map (map.exit stays set from then on), so repeat calls are no-ops.
+function checkExitReveal(){
+  if (!state.enemyMap.exit && isFullyKnown(state.human.knownMap)){
+    revealExitForMap(state.enemyMap);
+    log('The Exit has appeared! You\'ve mapped every cell — now find it by walking into the outer walls.', 'important');
+    showEventModal({
+      icon:'🚪', title:'Exit is available now!',
+      message:"You've fully explored the opponent's map. The Exit has appeared somewhere along the outer walls — it won't be on a Trap. Check outside walls by trying to walk through them to find it.",
+      forceShow: true,
+    });
+  }
+  if (!state.homeMap.exit && isFullyKnown(state.ai.knownMap)){
+    revealExitForMap(state.homeMap);
+    log('AI has now mapped every cell of your field — its Exit has appeared along the outer walls.', 'important');
+  }
+}
+
+// ============================================================
+// LABELS (English abbreviations everywhere; ambiguous "Tr" on
+// the hidden enemy board / fragments so identity isn't leaked)
+// ============================================================
+function publicLabel(type){
+  if (type === 'TrR' || type === 'TrF') return 'Tr';
+  if (type === 'UNKNOWN') return '';
+  return type;
+}
+function homeLabel(type, r, c, map){
+  if (type === 'H') { const idx = map.holeIndexByCoord[key(r,c)]; return 'H' + (idx||''); }
+  return type;
+}
+
+// ============================================================
+// GAME STATE
+// ============================================================
+let state = null;
+
+function newPlayerState(startPos){
+  return {
+    pos: {...startPos},
+    hasBombs: false,
+    carrying: { trueT: false, fakeT: false },
+    skipNextTurn: false,
+    movesExploring: 0, // steps taken before ever picking up a Treasure
+    movesToExit: 0,    // steps taken after picking one up, racing to the Exit
+  };
+}
+
+function newKnownMap(){
+  const cells=[];
+  for(let r=0;r<SIZE;r++){ const row=[]; for(let c=0;c<SIZE;c++) row.push({type:'UNKNOWN'}); cells.push(row); }
+  return {
+    cells,
+    knownWalls: {},        // absolute edgeKey -> 'UNSPECIFIED'|'DESTRUCTIBLE'|'NON_DESTRUCTIBLE'
+    checkedExternal: {}, // "r,c,DIR" -> true, once that outward-facing border edge has been bumped at all (known to be the boundary)
+    checkedForExit: {},  // "r,c,DIR" -> true, once that edge has been bumped SPECIFICALLY since the Exit became available —
+                          // a separate, later pass over the same walls, since pre-reveal bumps couldn't have found it
+    exitKnown: null,       // {r,c,dir} in absolute coords, once discovered while ORIENTED (or merged from a fragment)
+    fragments: [],        // fragment history — a mix of anchored AND still-unanchored fragments
+    activeFragment: null, // the fragment you're currently standing in while disoriented, or null if oriented
+    trail: [],             // real (r,c) path walked while oriented, kept on screen until you're
+                            // oriented again — shows where you were heading right before a Hole
+    holeArrows: [],        // [{from:ref, to:ref}] — ref is {kind:'real',r,c} or {kind:'frag',fragId,r,c}.
+                            // Purely a personal annotation the player
+                            // draws by dragging between two Hole cells on the opponent's map to
+                            // sketch out a hypothesized cycle order; has no effect on game logic.
+    fragmentPositions: {}, // fragId -> {x,y}, free-drag position within the Puzzle Fragments (whole block only)
+                            // panel — purely a personal organizing layout, no effect on game logic.
+    fragmentZ: {},          // fragId -> stacking order, so whichever card you last touched stays
+                            // on top of any others it overlaps, across re-renders.
+    topFragmentZ: 1,        // running counter behind fragmentZ — no effect on game logic.
+  };
+}
+
+function newFragment(id, realOriginCoord, entryType){
+  return {
+    id,
+    secretOrigin: { r: realOriginCoord.r, c: realOriginCoord.c }, // internal only — never read by AI decision logic or shown to player
+    nodes: [ { r:0, c:0, type: entryType || 'H' } ], // entry point is wherever you just landed (a Hole, or the river's Mouth)
+    edges: [],   // { r, c, dir, status }  -- relative to fragment origin
+    cursor: { r:0, c:0 },
+    anchored: false,
+  };
+}
+
+function initGame(cornerStr, difficulty, size){
+  SIZE = size;
+  holeLinkPending = null;
+  const [cr, cc] = cornerStr.split(',').map(Number);
+  const homeMap = createValidMap(difficulty);   // human's own field — fully visible to human
+  const enemyMap = createValidMap(difficulty);  // AI's field — human explores this, hidden
+
+  const aiStartCorner = choice(CORNERS());
+
+  state = {
+    difficulty,
+    size,
+    turn: 'HUMAN',
+    gameOver: false,
+    winner: null,
+    debug: false,
+    messages: [],
+    homeMap, enemyMap,
+    human: { ...newPlayerState({r:cr,c:cc}), knownMap: newKnownMap() },
+    ai: { ...newPlayerState(aiStartCorner), knownMap: newKnownMap() },
+    anchorSelection: { target: null, source: null }, // UI selection state for puzzle-anchoring
+    mergeMode: false,       // toggled via the "🔗 Merge" button in the puzzle panel
+    mergeSelection: null,   // { fragment, node } — first pick while in merge mode
+  };
+
+  // The starting cell is revealed immediately — no extra move needed to see what you're standing on.
+  revealCellDirect(state.human.knownMap, state.human.pos, enemyMap.cells[cr][cc].type);
+  revealCellDirect(state.ai.knownMap, state.ai.pos, homeMap.cells[aiStartCorner.r][aiStartCorner.c].type);
+  state.human.knownMap.trail = [{ r: cr, c: cc }];
+
+  log('Game started. Find the real Treasure on the opponent\'s field and carry it out through the Exit.', 'important');
+}
+
+function log(text, cls){
+  state.messages.unshift({ text, cls: cls||'' });
+  if(state.messages.length>60) state.messages.pop();
+}
+
+function revealCellDirect(known, coord, type){
+  const prev = known.cells[coord.r][coord.c];
+  known.cells[coord.r][coord.c] = { type, personalLabel: prev ? prev.personalLabel : undefined };
+}
+
+// ============================================================
+// EVENT MODAL (popup) — every significant action result is confirmed
+// through this, with a big Close button (or Yes/No for confirmations).
+// The player can opt out of the purely-informational ones via the
+// checkbox on the popup itself, or the toggle button next to Legend.
+// Decisions (Yes/No confirmations) always show regardless — those aren't
+// notifications, they require an actual choice.
+// ============================================================
+let eventPopupsEnabled = true;
+(function loadEventPopupSetting(){
+  try {
+    const saved = localStorage.getItem('hiddenMapTreasureHunt_eventPopupsEnabled');
+    if (saved !== null) eventPopupsEnabled = saved === 'true';
+  } catch (e) { /* localStorage unavailable — keep default (on) */ }
+})();
+function setEventPopupsEnabled(val){
+  eventPopupsEnabled = val;
+  try { localStorage.setItem('hiddenMapTreasureHunt_eventPopupsEnabled', String(val)); } catch (e) {}
+  updateEventPopupsToggleLabel();
+}
+function updateEventPopupsToggleLabel(){
+  const btn = document.getElementById('eventPopupsToggle');
+  if (!btn) return;
+  btn.textContent = '🔔 Event popups: ' + (eventPopupsEnabled ? 'On' : 'Off');
+  btn.classList.toggle('active', eventPopupsEnabled);
+}
+
+let eventModalQueue = [];
+function showEventModal(cfg){
+  eventModalQueue.push(cfg);
+  if (eventModalQueue.length === 1) renderEventModal();
+}
+function renderEventModal(){
+  const overlay = document.getElementById('eventModal');
+  let cfg = eventModalQueue[0];
+  // Skip past any informational (non-forceShow) popups while the player has turned them off —
+  // still run their default action so the game keeps flowing, just without the interruption.
+  while (cfg && !cfg.forceShow && !eventPopupsEnabled){
+    eventModalQueue.shift();
+    const buttons = (cfg.buttons && cfg.buttons.length) ? cfg.buttons : [{ label:'Close', primary:true }];
+    if (buttons[0] && buttons[0].onClick) buttons[0].onClick();
+    cfg = eventModalQueue[0];
+  }
+  if (!cfg){ overlay.classList.add('hidden'); return; }
+  document.getElementById('eventModalIcon').textContent = cfg.icon || '';
+  document.getElementById('eventModalTitle').textContent = cfg.title || '';
+  document.getElementById('eventModalMessage').textContent = cfg.message || '';
+  const checkboxRow = document.getElementById('eventModalCheckboxRow');
+  const checkbox = document.getElementById('eventModalDontShowAgain');
+  checkbox.checked = false;
+  checkboxRow.classList.toggle('hidden', !!cfg.forceShow);
+  const btnWrap = document.getElementById('eventModalButtons');
+  btnWrap.innerHTML = '';
+  const buttons = (cfg.buttons && cfg.buttons.length) ? cfg.buttons : [{ label:'Close', primary:true }];
+  buttons.forEach(b => {
+    const btn = document.createElement('button');
+    btn.className = b.primary ? 'em-btn-primary' : 'em-btn-secondary';
+    btn.textContent = b.label;
+    btn.addEventListener('click', () => {
+      if (!cfg.forceShow && checkbox.checked) setEventPopupsEnabled(false);
+      closeEventModal();
+      if (b.onClick) b.onClick();
+    });
+    btnWrap.appendChild(btn);
+  });
+  overlay.classList.remove('hidden');
+}
+function closeEventModal(){
+  eventModalQueue.shift();
+  if (eventModalQueue.length){ renderEventModal(); }
+  else { document.getElementById('eventModal').classList.add('hidden'); }
+}
+
+// ============================================================
+// MOVEMENT
+// ============================================================
+// autoBlow=true (AI): a destructible wall is blown automatically, as before.
+// autoBlow=false (human): stop and return DESTRUCTIBLE_FOUND so the caller can confirm first.
+function resolveMove(map, playerState, dir, autoBlow){
+  const pos = playerState.pos;
+  const [dr,dc] = DELTA[dir];
+  const nr = pos.r+dr, nc = pos.c+dc;
+  const outOfBounds = nr<0||nr>=SIZE||nc<0||nc>=SIZE;
+
+  if (outOfBounds){
+    if (map.exit && map.exit.r===pos.r && map.exit.c===pos.c && map.exit.dir===dir){
+      return { outcome:'EXIT_ATTEMPT', consumesTurn:true };
+    }
+    return { outcome:'BLOCKED_WALL', consumesTurn:false, external:true };
+  }
+
+  const ek = edgeKeyBetween(pos.r,pos.c,dir);
+  if (ek && map.chainSet.has(ek)){
+    if (!playerState.hasBombs){
+      return { outcome:'BLOCKED_WALL', consumesTurn:false, external:false };
+    }
+    if (autoBlow){
+      return { outcome:'MOVED', consumesTurn:true, newPos:{r:nr,c:nc}, viaBomb:true };
+    }
+    return { outcome:'DESTRUCTIBLE_FOUND', consumesTurn:false, newPos:{r:nr,c:nc} };
+  }
+  return { outcome:'MOVED', consumesTurn:true, ...riverAdjustedPos(map, pos, nr, nc) };
+}
+
+// If you're standing on a river cell and step onto its UPSTREAM neighbor in the river's
+// fixed sequence (i.e. away from the mouth: R1->R2, R2->R3, ..., or M->R1), the current
+// sweeps you straight down to the mouth instead. Stepping DOWNSTREAM along the sequence
+// (Ri->Ri-1, R1->M) is just a normal move. Stepping onto/off a river cell from any other,
+// non-sequential direction ("crossing" it) is also just a normal move.
+// The river is an unbroken chain R1 -> R2 -> ... -> Rn -> M, in that fixed order (M always
+// sits right after the highest-numbered R segment — that's the mouth). Stepping from one
+// river cell to the NEXT one in that order (index+1) — e.g. Ri -> Ri+1, or Rn -> M — is
+// going WITH the current: a completely normal move, you land exactly where you meant to.
+// Stepping to the PREVIOUS one (index-1) — e.g. Ri -> Ri-1, or M -> Rn — is going AGAINST
+// the current, and it sweeps you all the way down to the mouth instead. Crossing a river
+// cell from any direction that isn't one of its two path-neighbors ("perpendicular") is
+// also just a normal move — you're not fighting the flow.
+function riverAdjustedPos(map, pos, nr, nc){
+  const curIdx = map.riverIndexByCoord[key(pos.r,pos.c)];
+  if (curIdx === undefined) return { newPos:{r:nr,c:nc} };
+  const nextIdx = map.riverIndexByCoord[key(nr,nc)];
+  if (nextIdx === undefined) return { newPos:{r:nr,c:nc} };
+  if (nextIdx === curIdx - 1){ // moving AGAINST the current (back toward the source)
+    const mouth = map.riverPath[map.riverPath.length - 1];
+    return { newPos:{r:mouth.r,c:mouth.c}, riverSwept:true };
+  }
+  return { newPos:{r:nr,c:nc} }; // with the current (toward M), or a "crossing" step: normal
+}
+
+// Reveal info honestly: if disoriented, everything goes into the ACTIVE FRAGMENT using
+// relative coordinates only (drawn "as you walk it", not by real grid position). If oriented,
+// it goes straight onto the main known map at the real coordinate (which we can trust because
+// we actually know where we are).
+function revealAfterMove(map, known, playerStateBefore, dir, moveResult){
+  const pos = playerStateBefore.pos;
+  const disoriented = !!known.activeFragment;
+
+  if (moveResult.outcome === 'BLOCKED_WALL'){
+    if (moveResult.external){
+      const exitStatus = map.exit ? 'CHECKED_FOR_EXIT' : 'CHECKED_EXTERNAL';
+      if (disoriented){
+        const cur = known.activeFragment.cursor;
+        known.activeFragment.edges.push({ r:cur.r, c:cur.c, dir, status: exitStatus });
+      } else {
+        known.checkedExternal[extKey(pos.r,pos.c,dir)] = true;
+        if (map.exit) known.checkedForExit[extKey(pos.r,pos.c,dir)] = true;
+      }
+      return;
+    }
+    const status = playerStateBefore.hasBombs ? 'NON_DESTRUCTIBLE' : 'UNSPECIFIED';
+    if (disoriented){
+      const cur = known.activeFragment.cursor;
+      known.activeFragment.edges.push({ r:cur.r, c:cur.c, dir, status });
+    } else {
+      const ek = edgeKeyBetween(pos.r,pos.c,dir);
+      if (ek) known.knownWalls[ek] = status;
+    }
+    return;
+  }
+
+  if (moveResult.outcome === 'DESTRUCTIBLE_FOUND'){
+    // Discovered right now, regardless of whether the player chooses to blow it up.
+    const status = 'DESTRUCTIBLE';
+    if (disoriented){
+      const cur = known.activeFragment.cursor;
+      known.activeFragment.edges.push({ r:cur.r, c:cur.c, dir, status });
+    } else {
+      const ek = edgeKeyBetween(pos.r,pos.c,dir);
+      if (ek) known.knownWalls[ek] = status;
+    }
+    return;
+  }
+
+  if (moveResult.outcome === 'EXIT_ATTEMPT'){
+    if (disoriented){
+      const cur = known.activeFragment.cursor;
+      known.activeFragment.edges.push({ r:cur.r, c:cur.c, dir, status:'EXIT' });
+    } else {
+      known.exitKnown = { r:pos.r, c:pos.c, dir };
+    }
+    return;
+  }
+
+  // MOVED (possibly via bomb, AI-only auto-blow path)
+  if (moveResult.viaBomb){
+    const status = 'DESTRUCTIBLE';
+    if (disoriented){
+      const cur = known.activeFragment.cursor;
+      known.activeFragment.edges.push({ r:cur.r, c:cur.c, dir, status });
+    } else {
+      const ek = edgeKeyBetween(pos.r,pos.c,dir);
+      if (ek) known.knownWalls[ek] = status;
+    }
+  }
+  const newPos = moveResult.newPos;
+  const cellType = map.cells[newPos.r][newPos.c].type;
+
+  if (moveResult.riverSwept){
+    const bounced = newPos.r === pos.r && newPos.c === pos.c;
+    if (!bounced){
+      // Once you've already pinpointed exactly where the Mouth really sits on the real map
+      // (oriented, and this cell isn't UNKNOWN to you anymore), being swept back to it is just
+      // confirmation of ground you've already investigated — not disorienting. Only the FIRST
+      // time you're swept there (or while you're still lost elsewhere) does it behave like a
+      // Hole and open a fresh puzzle fragment instead of revealing straight onto the real map.
+      const mouthAlreadyInvestigated = !disoriented && known.cells[newPos.r][newPos.c].type !== 'UNKNOWN';
+      if (mouthAlreadyInvestigated){
+        revealCellDirect(known, newPos, cellType);
+        if (known.trail) known.trail.push({ r: newPos.r, c: newPos.c });
+        known.teleportArrival = { ref: { kind:'real', r: newPos.r, c: newPos.c }, until: Date.now()+1300 };
+      } else {
+        startNewFragmentOnTeleport(known, newPos, 'M');
+        known.teleportArrival = { ref: { kind:'frag', fragId: known.activeFragment.id, r:0, c:0 }, until: Date.now()+1300 };
+      }
+    }
+    // Already standing at the mouth and tried to push further upstream — the current just
+    // bounces you right back where you are, nothing new to record.
+    return;
+  }
+
+  if (disoriented){
+    const cur = known.activeFragment.cursor;
+    const [dr,dc] = DELTA[dir];
+    const steppedRel = { r: cur.r+dr, c: cur.c+dc };
+    // The mouth, M, is a single unique real cell — if THIS fragment has already recorded it
+    // anywhere (even at a different relative spot, e.g. left over from an earlier sweep that
+    // warped the cursor), always land back on that same node instead of stamping down a
+    // second, duplicate "M" square next to it. Every other cell type places normally.
+    known.activeFragment.cursor = placeOrReuseFragmentCell(known.activeFragment, cellType, steppedRel);
+  } else {
+    revealCellDirect(known, newPos, cellType);
+    // Extend the visible route trail — only meaningful while oriented; it's what lets you see,
+    // once a Hole disorients you, exactly which path led up to it.
+    if (known.trail) known.trail.push({ r: newPos.r, c: newPos.c });
+  }
+}
+
+// Places a freshly-stepped-on cell into the active fragment at its dead-reckoned relative
+// position — UNLESS it's the mouth (M) and this fragment already has one recorded somewhere
+// else, in which case the existing node's position is reused instead of creating a duplicate.
+// Returns the relative coordinate the cursor should move to.
+function placeOrReuseFragmentCell(fragment, cellType, steppedRel){
+  if (cellType === 'M'){
+    const existing = fragment.nodes.find(n => n.type === 'M');
+    if (existing) return { r: existing.r, c: existing.c };
+  }
+  const alreadyHasNodeThere = fragment.nodes.some(n => n.r===steppedRel.r && n.c===steppedRel.c);
+  if (!alreadyHasNodeThere) fragment.nodes.push({ r:steppedRel.r, c:steppedRel.c, type: cellType });
+  return steppedRel;
+}
+
+function startNewFragmentOnTeleport(known, realDestCoord, entryType){
+  if (known.activeFragment) known.fragments.push(known.activeFragment);
+  known.activeFragment = newFragment(known.fragments.length + 1, realDestCoord, entryType);
+}
+
+// ---- Applying cell effects after a successful move ----
+// buildModal: only true for the human's own move (AI doesn't need popups).
+// hiddenTreasureId: true when the found-treasure identity must stay ambiguous in the log (human's own pickups).
+// gateByPersonalLabel: true for the human only — see the 'H' branch below.
+function applyCellEffects(map, playerState, known, whoLabel, hiddenTreasureId, buildModal, gateByPersonalLabel){
+  const {r,c} = playerState.pos;
+  const type = map.cells[r][c].type;
+  let modal = null;
+
+  if (type === 'S'){
+    playerState.skipNextTurn = true;
+    log(whoLabel + ': Swamp — next turn will be skipped.', '');
+    if (buildModal) modal = { icon:'💧', title:'Swamp!', message:'Your next turn will be skipped. Click any direction again to pass it.' };
+  }
+  if (type === 'A'){
+    playerState.hasBombs = true;
+    log(whoLabel + ': Armory — Bombs acquired.', '');
+    if (buildModal) modal = { icon:'💣', title:'Armory', message:'You picked up Bombs. You can now detect and blow up destructible walls.' };
+  }
+  if (type === 'T'){
+    const hadTreasure = playerState.carrying.trueT || playerState.carrying.fakeT;
+    const hadBombs = playerState.hasBombs;
+    playerState.carrying.trueT = false;
+    playerState.carrying.fakeT = false;
+    playerState.hasBombs = false;
+    log(whoLabel + ': Trap — ' + (hadTreasure ? 'Treasure(s) returned to their original cells, Bombs lost.' : 'Bombs lost.'), 'important');
+    if (buildModal){
+      if (hadTreasure) modal = { icon:'🪤', title:'Trap!', message:'Your Treasure was returned to its original cell and your Bombs were taken.' };
+      else if (hadBombs) modal = { icon:'🪤', title:'Trap!', message:'Your Bombs were taken.' };
+      else modal = { icon:'🪤', title:'Trap!', message:'You had nothing to lose this time.' };
+    }
+  }
+  if (type === 'TrR' || type === 'TrF'){
+    const already = (type==='TrR' && playerState.carrying.trueT) || (type==='TrF' && playerState.carrying.fakeT);
+    if (!already){
+      if (type==='TrR') playerState.carrying.trueT = true; else playerState.carrying.fakeT = true;
+      log(whoLabel + ': found a Treasure ' + (hiddenTreasureId ? '(type unknown).' : '(' + type + ').'), 'important');
+      if (buildModal) modal = { icon:'💰', title:'Treasure found!', message:"You picked up a Treasure. You won't know if it's real until you try the Exit." };
+    }
+  }
+  if (type === 'H'){
+    const idx = map.holeIndexByCoord[key(r,c)];
+    const nextIdx = idx===map.holeCycleLen ? 1 : idx+1;
+    const nextCoord = map.holeCycle[nextIdx];
+    const disorientedBefore = !!known.activeFragment;
+
+    let skipPuzzle;
+    if (gateByPersonalLabel){
+      // Honest gate: skipping the puzzle must be earned by the PLAYER's own personal-label
+      // bookkeeping, never by secretly knowing which cells are Holes. No label on the Hole
+      // you're standing on means "I don't know" — straight to a puzzle fragment. A label that
+      // doesn't correctly predict the next Hole's label (by your own 1→2→…→N→1 numbering)
+      // means your read on the cycle's logic is wrong — also to a puzzle fragment, even if you
+      // happen to already know both cells exist.
+      const curInfo = known.cells[r][c];
+      const curLabel = curInfo && curInfo.personalLabel ? parseInt(curInfo.personalLabel, 10) : NaN;
+      skipPuzzle = false;
+      if (!isNaN(curLabel)){
+        const destInfo = known.cells[nextCoord.r] && known.cells[nextCoord.r][nextCoord.c];
+        if (destInfo && destInfo.type !== 'UNKNOWN' && destInfo.personalLabel){
+          const destLabel = parseInt(destInfo.personalLabel, 10);
+          const expectedNext = curLabel === map.holeCycleLen ? 1 : curLabel + 1;
+          skipPuzzle = destLabel === expectedNext;
+        }
+      }
+      // A hand-drawn arrow the player has established between two Holes that are BOTH already
+      // sitting on the real map is treated as just as reliable as a validated label sequence —
+      // the player declared this connection themselves, so re-disorienting them over it would
+      // just be a redundant, annoying extra step.
+      if (!skipPuzzle && known.holeArrows && known.holeArrows.length){
+        const fromRef = { kind:'real', r, c };
+        const toRef = { kind:'real', r: nextCoord.r, c: nextCoord.c };
+        skipPuzzle = known.holeArrows.some(a =>
+          (refsEqual(a.from, fromRef) && refsEqual(a.to, toRef)) ||
+          (refsEqual(a.from, toRef) && refsEqual(a.to, fromRef))
+        );
+      }
+    } else {
+      // Only skip the puzzle when EVERY Hole on the map has already been legitimately placed on
+      // the known map (i.e. the whole cycle has been solved) — not just this one destination.
+      skipPuzzle = Object.values(map.holeCycle).every(pos => {
+        const info = known.cells[pos.r][pos.c];
+        return info && info.type !== 'UNKNOWN';
+      });
+    }
+
+    playerState.pos = { r: nextCoord.r, c: nextCoord.c };
+
+    if (!disorientedBefore && skipPuzzle){
+      // Already correctly deduced — no new puzzle is needed, stay fully oriented.
+      log(whoLabel + ': Hole! Teleported — you already know this transition.', 'important');
+      if (buildModal) modal = { icon:'🕳️', title:'Hole!', message:"You've been teleported, but you already had this Hole's cycle transition figured out — no new puzzle needed." };
+      if (known.trail) known.trail = [{ r: nextCoord.r, c: nextCoord.c }];
+      known.teleportArrival = { ref: { kind:'real', r: nextCoord.r, c: nextCoord.c }, until: Date.now()+1300 };
+      return { result:'TELEPORTED_KNOWN', modal };
+    }
+
+    // Where you're departing FROM, for the auto hole-arrow below — needs capturing before
+    // startNewFragmentOnTeleport() replaces known.activeFragment with the new fragment.
+    const departureRef = disorientedBefore
+      ? { kind:'frag', fragId: known.activeFragment.id, r: known.activeFragment.cursor.r, c: known.activeFragment.cursor.c }
+      : { kind:'real', r, c };
+
+    startNewFragmentOnTeleport(known, nextCoord);
+    // Auto-draw the same Hole-to-Hole arrow the player would otherwise have to drag by hand —
+    // you just walked departureRef straight into this new fragment's entry Hole, so the
+    // connection is already certain; no reason to make the player re-declare it manually.
+    if (known.holeArrows){
+      known.holeArrows.push({ from: departureRef, to: { kind:'frag', fragId: known.activeFragment.id, r:0, c:0 } });
+    }
+    known.teleportArrival = { ref: { kind:'frag', fragId: known.activeFragment.id, r:0, c:0 }, until: Date.now()+1300 };
+    log(whoLabel + ': Hole! Teleported — orientation lost, new puzzle fragment created.', 'important');
+    if (buildModal) modal = { icon:'🕳️', title:'You fell into a Hole!', message:"You've been teleported and lost your orientation. The board switched to puzzle view — figure out where this new fragment really is, then anchor it." };
+    return { result:'TELEPORTED_NEW', modal };
+  }
+  return { result:'NORMAL', modal };
+}
+
+function resolveExit(playerState, whoLabel){
+  if (playerState.carrying.trueT) return 'WIN';
+  if (playerState.carrying.fakeT){
+    playerState.carrying.fakeT = false;
+    log(whoLabel + ": that was the FAKE Treasure. Returned to its original cell.", 'important');
+    return 'FALSE_REVERT';
+  }
+  log(whoLabel + ": no Treasure — exit attempt doesn't count.", '');
+  return 'NO_TREASURE_REVERT';
+}
+
+// ============================================================
+// TURN EXECUTION
+// ============================================================
+// A turn-consuming step counts as "exploring" if you weren't carrying any Treasure yet at the
+// start of it (including the very step that picks one up), or "to the Exit" once you already
+// were — a simple, always-accurate split without needing a separate "phase" flag anywhere else.
+function countHumanMove(){
+  const p = state.human;
+  if (p.carrying.trueT || p.carrying.fakeT) p.movesToExit++;
+  else p.movesExploring++;
+}
+
+function humanMove(dir){
+  if (state.gameOver || state.turn !== 'HUMAN') return;
+  if (eventModalQueue.length) return; // a blocking popup is open — wait for it to close
+  const p = state.human;
+  if (p.skipNextTurn){
+    p.skipNextTurn = false;
+    log('You: turn skipped (Swamp).', '');
+    renderAll();
+    showEventModal({
+      icon:'💤', title:'Turn skipped',
+      message:'That was your skipped turn (Swamp).',
+      buttons:[{ label:'Close', primary:true, onClick: endHumanTurn }]
+    });
+    return;
+  }
+  const before = { pos: {...p.pos}, hasBombs: p.hasBombs };
+  const wasDisorientedBefore = !!p.knownMap.activeFragment;
+  const result = resolveMove(state.enemyMap, p, dir, false);
+  revealAfterMove(state.enemyMap, p.knownMap, before, dir, result);
+
+  if (result.outcome === 'BLOCKED_WALL'){
+    log(result.external ? 'You: outer wall.' : (p.hasBombs ? 'You: this wall cannot be blown up.' : 'You: wall (type unknown).'), '');
+    renderAll();
+    return; // does not consume turn
+  }
+  if (result.outcome === 'DESTRUCTIBLE_FOUND'){
+    renderAll();
+    showEventModal({
+      icon:'💣', title:'Destructible wall found',
+      message:'Your Bombs detected that this wall is destructible. Blow it up?',
+      forceShow: true,
+      buttons:[
+        { label:'Yes', primary:true, onClick: () => {
+            log('You: blew up the wall!', 'important');
+            // The first revealAfterMove call (above) only recorded the wall itself as
+            // destructible — resolveMove doesn't actually move you until you confirm, so the
+            // cell you land on next was never revealed. Do that reveal now, exactly like a
+            // normal step (marking the wall again here is harmless — same status either way).
+            revealAfterMove(state.enemyMap, p.knownMap, before, dir, { outcome:'MOVED', newPos: result.newPos, viaBomb:true });
+            completeHumanMove(result.newPos);
+          } },
+        { label:'No', onClick: () => {
+            renderAll();
+            showEventModal({ icon:'🧱', title:'Wall left standing', message:'Choose another direction.', buttons:[{ label:'Close', primary:true }] });
+          } }
+      ]
+    });
+    return;
+  }
+  if (result.outcome === 'EXIT_ATTEMPT'){
+    countHumanMove();
+    const outcome = resolveExit(p, 'You');
+    if (outcome === 'WIN'){ endGame('HUMAN'); return; }
+    renderAll();
+    const cfg = outcome === 'FALSE_REVERT'
+      ? { icon:'🎭', title:'Fake Treasure!', message:'That was the FAKE Treasure — it has been returned to its original cell.' }
+      : { icon:'🚪', title:'No Treasure', message:"You don't have a Treasure — the exit attempt doesn't count." };
+    showEventModal({ ...cfg, buttons:[{ label:'Close', primary:true, onClick: endHumanTurn }] });
+    return;
+  }
+  if (result.riverSwept){
+    const stayedPut = result.newPos.r === before.pos.r && result.newPos.c === before.pos.c;
+    if (stayedPut){
+      log('You: movement against the current is not possible — you are already at the mouth.', 'important');
+      renderAll();
+      showEventModal({
+        icon:'🌊', title:'Movement against the current is forbidden!',
+        message:"You're already at the river's mouth — you can't push back upstream against the current from here.",
+        forceShow: true,
+        buttons:[{ label:'Close', primary:true, onClick: () => completeHumanMove(result.newPos) }]
+      });
+    } else {
+      log('You: swam against the current — swept back down to the mouth.', 'important');
+      if (wasDisorientedBefore) log('You: Mouth! Swept — orientation lost, new puzzle fragment created.', 'important');
+      renderAll();
+      showEventModal({
+        icon:'🌊', title:'Swept by the current!',
+        message:"You tried to move upstream, away from the mouth, and the current carried you straight back down to it.",
+        forceShow: true,
+        buttons:[{ label:'Close', primary:true, onClick: () => completeHumanMove(result.newPos) }]
+      });
+    }
+    return;
+  }
+  completeHumanMove(result.newPos);
+}
+
+function completeHumanMove(newPos){
+  const p = state.human;
+  countHumanMove();
+  p.pos = newPos;
+  const { modal } = applyCellEffects(state.enemyMap, p, p.knownMap, 'You', true, true, true);
+  renderAll();
+  if (modal){
+    showEventModal({ ...modal, buttons:[{ label:'Close', primary:true, onClick: endHumanTurn }] });
+  } else {
+    endHumanTurn();
+  }
+}
+
+function endHumanTurn(){
+  if (state.gameOver) return;
+  state.turn = 'AI';
+  renderAll();
+  setTimeout(aiTurn, 650);
+}
+function endAiTurn(){
+  if (state.gameOver) return;
+  state.turn = 'HUMAN';
+  renderAll();
+}
+function endGame(winner){
+  state.gameOver = true;
+  state.winner = winner;
+  renderAll();
+  showGameOver(winner);
+}
+
+// ---- AI turn ----
+function aiTurn(){ aiStep(3); }
+
+function aiStep(attemptsLeft){
+  if (state.gameOver) return;
+  const p = state.ai;
+  if (p.skipNextTurn){
+    p.skipNextTurn = false;
+    log('AI: turn skipped (Swamp).', '');
+    endAiTurn();
+    return;
+  }
+  if (attemptsLeft <= 0){ endAiTurn(); return; }
+
+  const dir = decideAiMove(p, state.difficulty);
+  const before = { pos: {...p.pos}, hasBombs: p.hasBombs };
+  const result = resolveMove(state.homeMap, p, dir, true);
+  revealAfterMove(state.homeMap, p.knownMap, before, dir, result);
+
+  if (result.outcome === 'BLOCKED_WALL'){
+    aiStep(attemptsLeft - 1);
+    return;
+  }
+  if (result.outcome === 'EXIT_ATTEMPT'){
+    const outcome = resolveExit(p, 'AI');
+    if (outcome === 'WIN'){ endGame('AI'); return; }
+    renderAll();
+    endAiTurn();
+    return;
+  }
+  if (result.riverSwept){
+    log('AI: swam against the current — swept back down to the mouth.', 'important');
+  }
+  p.pos = result.newPos;
+  applyCellEffects(state.homeMap, p, p.knownMap, 'AI', false, false, false);
+  renderAll();
+  endAiTurn();
+}
+
+// ---- AI decision logic ----
+// Honesty rule: decideAiMove must NEVER read map.chainSet / map.cells (the real map) or any
+// fragment's secretOrigin. It may only use `p.pos` (its own real position — an agent always
+// knows where its own token is) and `known` (what it has legitimately discovered so far).
+function decideAiMove(p, difficulty){
+  const known = p.knownMap;
+  const dirs = ['UP','DOWN','LEFT','RIGHT'];
+
+  if (known.activeFragment){
+    const cur = known.activeFragment.cursor;
+    const tried = new Set(known.activeFragment.edges.filter(e => e.r===cur.r && e.c===cur.c && e.status!=='UNSPECIFIED').map(e=>e.dir));
+    const candidates = dirs.filter(d => !tried.has(d));
+    return choice(candidates.length ? candidates : dirs);
+  }
+
+  if (difficulty === 1){
+    const scored = dirs.map(d => {
+      const [dr,dc] = DELTA[d];
+      const nr=p.pos.r+dr, nc=p.pos.c+dc;
+      let score = Math.random();
+      if (inBounds(nr,nc) && known.cells[nr][nc].type === 'UNKNOWN') score += 0.5;
+      return { d, score };
+    });
+    scored.sort((a,b)=>b.score-a.score);
+    return scored[0].d;
+  }
+
+  // Normal: goal-directed BFS over the known map.
+  if (p.carrying.trueT || p.carrying.fakeT){
+    if (known.exitKnown){
+      const path = bfsPathOnKnown(known, p.pos, {r:known.exitKnown.r, c:known.exitKnown.c});
+      if (path) return path;
+    }
+  } else if (!p.hasBombs && known.armoryPos){
+    const path = bfsPathOnKnown(known, p.pos, known.armoryPos);
+    if (path) return path;
+  }
+  const frontierDir = bfsPathToFrontier(known, p.pos);
+  if (frontierDir) return frontierDir;
+  return choice(dirs);
+}
+
+function bfsPathOnKnown(known, start, goal){
+  const visited = new Set([key(start.r,start.c)]);
+  const queue = [{pos:start, firstDir:null}];
+  while(queue.length){
+    const cur = queue.shift();
+    if (cur.pos.r === goal.r && cur.pos.c === goal.c) return cur.firstDir;
+    for (const n of neighborsOf(cur.pos.r, cur.pos.c)){
+      const nk = key(n.r,n.c);
+      if (visited.has(nk)) continue;
+      const ek = edgeKeyBetween(cur.pos.r, cur.pos.c, n.dir);
+      const wallStatus = ek ? known.knownWalls[ek] : undefined;
+      if (wallStatus === 'NON_DESTRUCTIBLE') continue;
+      visited.add(nk);
+      queue.push({ pos:{r:n.r,c:n.c}, firstDir: cur.firstDir || n.dir });
+    }
+  }
+  return null;
+}
+function bfsPathToFrontier(known, start){
+  const visited = new Set([key(start.r,start.c)]);
+  const queue = [{pos:start, firstDir:null}];
+  while(queue.length){
+    const cur = queue.shift();
+    if (known.cells[cur.pos.r][cur.pos.c].type === 'UNKNOWN' && !(cur.pos.r===start.r && cur.pos.c===start.c)){
+      return cur.firstDir;
+    }
+    for (const n of neighborsOf(cur.pos.r, cur.pos.c)){
+      const nk = key(n.r,n.c);
+      if (visited.has(nk)) continue;
+      const ek = edgeKeyBetween(cur.pos.r, cur.pos.c, n.dir);
+      const wallStatus = ek ? known.knownWalls[ek] : undefined;
+      if (wallStatus === 'NON_DESTRUCTIBLE') continue;
+      visited.add(nk);
+      queue.push({ pos:{r:n.r,c:n.c}, firstDir: cur.firstDir || n.dir });
+    }
+  }
+  return null;
+}
+
+// ============================================================
+// PUZZLE ANCHORING (manual, player-driven; no auto-solve)
+// ============================================================
+function attemptAnchor(){
+  const sel = state.anchorSelection;
+  if (!sel.target || !sel.source) return;
+
+  const { fragment, node } = sel.source;
+  const predicted = { r: fragment.secretOrigin.r + node.r, c: fragment.secretOrigin.c + node.c };
+  const correct = predicted.r === sel.target.r && predicted.c === sel.target.c;
+
+  if (correct){
+    const wasActive = (state.human.knownMap.activeFragment === fragment);
+    mergeFragment(state.human.knownMap, fragment);
+    log('Puzzle #' + fragment.id + ' successfully anchored to the map!', 'important');
+    state.anchorSelection = { target: null, source: null };
+    // Back on the map and oriented again — clear the old route trail so a fresh one starts
+    // building from here for the next disorientation, instead of leaving stale arrows behind.
+    if (wasActive) state.human.knownMap.trail = [{ ...state.human.pos }];
+    renderAll();
+  } else {
+    // Visual failure feedback only — no state change, no hints.
+    flashFail(sel.target, sel.source);
+    state.anchorSelection = { target: null, source: null };
+    renderAll();
+  }
+}
+
+function mergeFragment(known, fragment){
+  for (const node of fragment.nodes){
+    const abs = { r: fragment.secretOrigin.r + node.r, c: fragment.secretOrigin.c + node.c };
+    if (inBounds(abs.r, abs.c)){
+      revealCellDirect(known, abs, node.type);
+      if (node.personalLabel) known.cells[abs.r][abs.c].personalLabel = node.personalLabel;
+    }
+  }
+  for (const edge of fragment.edges){
+    const absR = fragment.secretOrigin.r + edge.r;
+    const absC = fragment.secretOrigin.c + edge.c;
+    if (edge.status === 'EXIT'){
+      known.exitKnown = { r: absR, c: absC, dir: edge.dir };
+    } else if (edge.status === 'CHECKED_EXTERNAL'){
+      known.checkedExternal[extKey(absR, absC, edge.dir)] = true;
+    } else if (edge.status === 'CHECKED_FOR_EXIT'){
+      known.checkedExternal[extKey(absR, absC, edge.dir)] = true;
+      known.checkedForExit[extKey(absR, absC, edge.dir)] = true;
+    } else {
+      const ek = edgeKeyBetween(absR, absC, edge.dir);
+      if (ek) known.knownWalls[ek] = edge.status;
+    }
+  }
+  // Any arrow endpoint that pointed into THIS fragment (fragment-relative) now has a known
+  // real position — rewrite it in place. The arrow itself is preserved; only the coordinate
+  // space of that one endpoint changes, exactly like the fragment's own cells do above.
+  if (known.holeArrows && known.holeArrows.length){
+    known.holeArrows.forEach(a => {
+      [a.from, a.to].forEach(ref => {
+        if (ref.kind === 'frag' && ref.fragId === fragment.id){
+          const abs = { r: fragment.secretOrigin.r + ref.r, c: fragment.secretOrigin.c + ref.c };
+          ref.kind = 'real'; ref.r = abs.r; ref.c = abs.c;
+          delete ref.fragId;
+        }
+      });
+    });
+  }
+
+  fragment.anchored = true;
+  if (known.activeFragment === fragment){
+    known.activeFragment = null;
+    known.fragments.push(fragment);
+  }
+}
+
+let pendingFailFlash = null; // {targetKey, fragmentId, nodeKey} set briefly for one render pass
+function flashFail(target, source){
+  pendingFailFlash = {
+    targetKey: key(target.r, target.c),
+    fragmentId: source.fragment.id,
+    nodeKey: key(source.node.r, source.node.c),
+  };
+  setTimeout(() => { pendingFailFlash = null; renderAll(); }, 500);
+}
+
+// ============================================================
+// RENDERING
+// ============================================================
+const TYPE_CLASS = { L:'land', S:'swamp', H:'hole', T:'trap', A:'armory', TrR:'treasure', TrF:'treasure' };
+function classForType(type){
+  if (TYPE_CLASS[type]) return TYPE_CLASS[type];
+  if (type === 'M') return 'mouth';
+  if (/^R\d*$/.test(type||'')) return 'river';
+  return '';
+}
+
+function applyWallMarks(cellDiv, marks){
+  if (!marks.length) return;
+  const shadows = marks.map(m => {
+    const px = '3px';
+    switch(m.dir){
+      case 'UP': return `inset 0 ${px} 0 0 ${m.color}`;
+      case 'DOWN': return `inset 0 -${px} 0 0 ${m.color}`;
+      case 'LEFT': return `inset ${px} 0 0 0 ${m.color}`;
+      case 'RIGHT': return `inset -${px} 0 0 0 ${m.color}`;
+    }
+  });
+  cellDiv.style.boxShadow = shadows.join(', ');
+}
+
+function wallColorFor(status){
+  if (status === 'DESTRUCTIBLE') return 'var(--wall-destructible)';
+  if (status === 'NON_DESTRUCTIBLE') return 'var(--wall-nondestructible)';
+  if (status === 'EXIT') return 'var(--exit-glow)';
+  if (status === 'CHECKED_FOR_EXIT') return 'var(--wall-checked-exit)';
+  if (status === 'CHECKED_EXTERNAL') return 'var(--wall-checked-external)';
+  return 'var(--wall-unspecified)';
+}
+
+function addExitMarker(cellDiv, dir){
+  const marker = document.createElement('div');
+  marker.className = 'exit-marker exit-marker-' + dir.toLowerCase();
+  marker.textContent = '🚪';
+  cellDiv.appendChild(marker);
+}
+
+const TRAIL_ARROW_GLYPH = { UP:'↑', DOWN:'↓', LEFT:'←', RIGHT:'→' };
+function dirFromDelta(dr, dc){
+  if (dr===-1 && dc===0) return 'UP';
+  if (dr===1 && dc===0) return 'DOWN';
+  if (dr===0 && dc===-1) return 'LEFT';
+  if (dr===0 && dc===1) return 'RIGHT';
+  return null; // non-adjacent jump (e.g. a known Hole teleport mid-trail) — no arrow drawn for it
+}
+function addTrailArrow(cellDiv, dir){
+  const arrow = document.createElement('div');
+  arrow.className = 'trail-arrow dir-' + dir;
+  arrow.textContent = TRAIL_ARROW_GLYPH[dir];
+  cellDiv.appendChild(arrow);
+}
+// A small step-number badge tucked right beside the trail arrow itself (not in the top-left
+// corner, which is where the cell's own type label sits — that's what it used to cover).
+// Same color family as the cell's trail outline (accent for a mid-path cell, danger for the
+// final Hole cell). Cells with no outgoing arrow (the trail's very last cell) fall back to a
+// safe top-right-ish spot instead.
+function addTrailNumber(cellDiv, num, isTrailEnd, arrowDir){
+  const badge = document.createElement('div');
+  const posClass = arrowDir ? 'trail-num-' + arrowDir : 'trail-num-fallback';
+  badge.className = 'trail-num ' + posClass + (isTrailEnd ? ' trail-num-end' : '');
+  badge.textContent = String(num);
+  cellDiv.appendChild(badge);
+}
+
+// Custom icons for Trap and Swamp — no single emoji reads clearly as "spike trap" or "murky
+// swamp" (vs. a plain water drop), so these are drawn by hand, flat-vector style to match the
+// pirate-hat / player-figure icons used elsewhere. Trap: a caltrop/floor-spike design — four
+// sharp spikes radiating from a center rivet, distinct from a chained leg-hold trap silhouette.
+const TRAP_ICON_SVG = '<svg viewBox="0 0 24 24">' +
+  '<circle cx="12" cy="12" r="8" fill="#2a1c10" opacity="0.55"/>' +
+  '<polygon points="12,3.5 14.2,11.5 12,10 9.8,11.5" fill="#c9ccd1"/>' +
+  '<polygon points="20.5,12 12.5,14.2 14,12 12.5,9.8" fill="#c9ccd1"/>' +
+  '<polygon points="12,20.5 9.8,12.5 12,14 14.2,12.5" fill="#c9ccd1"/>' +
+  '<polygon points="3.5,12 11.5,9.8 10,12 11.5,14.2" fill="#c9ccd1"/>' +
+  '<circle cx="12" cy="12" r="1.7" fill="#8a1f1f"/>' +
+  '</svg>';
+const SWAMP_ICON_SVG = '<svg viewBox="0 0 24 24">' +
+  '<ellipse cx="12" cy="17.5" rx="9" ry="3.6" fill="#3f5a3a" opacity="0.65"/>' +
+  '<path d="M8 17.5C8 11.5 7.2 8.3 6.6 5" fill="none" stroke="#5c7a4b" stroke-width="1.3"/>' +
+  '<ellipse cx="6.4" cy="4.2" rx="1" ry="2" fill="#5c7a4b" transform="rotate(-15 6.4 4.2)"/>' +
+  '<path d="M13 17.5C13.3 10.8 14.4 7.6 15.4 4.2" fill="none" stroke="#5c7a4b" stroke-width="1.3"/>' +
+  '<ellipse cx="15.6" cy="3.6" rx="1" ry="2.1" fill="#6b8a58" transform="rotate(12 15.6 3.6)"/>' +
+  '<path d="M17.6 17.5C17.3 13 18.1 10.5 18.9 8.4" fill="none" stroke="#5c7a4b" stroke-width="1.1"/>' +
+  '<ellipse cx="19.1" cy="7.7" rx="0.8" ry="1.6" fill="#5c7a4b" transform="rotate(18 19.1 7.7)"/>' +
+  '</svg>';
+const ICON_FOR_TYPE = {
+  L: '', S: SWAMP_ICON_SVG, H: '🕳️', T: TRAP_ICON_SVG, A: '💣', TrR: '💰', TrF: '💰', Tr: '💰',
+  M: '🌊', R: '🌊',
+};
+function iconForLabel(labelText){
+  const base = (labelText||'').replace(/[0-9]/g,'');
+  return ICON_FOR_TYPE[base] || '';
+}
+const FULL_LABEL_FOR_BASE = {
+  L:'Land', S:'Swamp', H:'Hole', T:'Trap', A:'Armory',
+  TrR:'True Treasure', TrF:'Fake Treasure', Tr:'Treasure',
+  M:'Mouth', R:'River',
+};
+// Main boards spell types out in full ("Hole 3", "Treasure") for readability; puzzle
+// fragments keep the compact letter codes (H3, Tr) since they're small, dense squares.
+function fullLabelFor(labelText){
+  const m = (labelText||'').match(/^([A-Za-z]+)(\d*)$/);
+  if (!m) return labelText;
+  const full = FULL_LABEL_FOR_BASE[m[1]];
+  if (!full) return labelText;
+  return m[2] ? (full + ' ' + m[2]) : full;
+}
+// Design layout: type letter top-left, icon bottom-right corner, token dead-center
+// (see .cell-label / .cell-icon-corner / .token in <style>). Pass fullWord=true on the two
+// main boards to spell the type out; leave it off (puzzle fragments) for the short code.
+function makeCellDiv(typeForClass, labelText, fullWord){
+  const div = document.createElement('div');
+  div.className = 'cell' + (typeForClass ? ' ' + typeForClass : '');
+  if (labelText){
+    const lbl = document.createElement('div');
+    lbl.className = 'cell-label' + (fullWord ? ' full-word' : '');
+    const letterSpan = document.createElement('div');
+    letterSpan.className = 'cell-letter';
+    letterSpan.textContent = fullWord ? fullLabelFor(labelText) : labelText;
+    lbl.appendChild(letterSpan);
+    div.appendChild(lbl);
+    const icon = iconForLabel(labelText);
+    if (icon){
+      const iconSpan = document.createElement('div');
+      iconSpan.className = 'cell-icon-corner';
+      if (icon.trim().startsWith('<svg')) iconSpan.innerHTML = icon; else iconSpan.textContent = icon;
+      div.appendChild(iconSpan);
+    }
+  }
+  return div;
+}
+
+// Player's own token — a plain figure, no letter, so it reads as a piece rather than an initial.
+// A simple pirate tricorn hat silhouette (front view: wide upturned brim, slight center dip,
+// small shadowed band standing in for the hat's emblem) — used for the player's own token.
+const PLAYER_FIGURE_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 14C2 14 5 6 12 6C19 6 22 14 22 14C22 14 17 16.5 12 14.2C7 16.5 2 14 2 14Z"/><path d="M8.5 13.6C9.5 11.8 10.6 10.8 12 10.8C13.4 10.8 14.5 11.8 15.5 13.6C14.4 14.1 13.2 13.9 12 13.4C10.8 13.9 9.6 14.1 8.5 13.6Z" opacity="0.4"/></svg>';
+// Checks whether `ref` (a {kind:'real',r,c} or {kind:'frag',fragId,r,c}) is the cell you just
+// teleported into, within a short window after the move — used to play a brief "something
+// happened here" pop/flash animation instead of the token just silently appearing.
+function isTeleportArrival(known, ref){
+  const t = known.teleportArrival;
+  if (!t || Date.now() >= t.until) return false;
+  if (t.ref.kind !== ref.kind) return false;
+  if (ref.kind === 'real') return t.ref.r === ref.r && t.ref.c === ref.c;
+  return t.ref.fragId === ref.fragId && t.ref.r === ref.r && t.ref.c === ref.c;
+}
+
+function addToken(cellDiv, cls, carryingTreasure, carryingBomb, pulse){
+  const tok = document.createElement('div');
+  tok.className = 'token ' + cls + (pulse ? ' teleport-pop' : '');
+  if (cls === 'you'){ tok.innerHTML = PLAYER_FIGURE_SVG; }
+  else { tok.textContent = 'AI'; }
+  if (carryingTreasure){
+    // Shows on your own token whenever you're holding EITHER treasure — real or fake, doesn't
+    // matter which, you won't know until the Exit anyway — so at a glance you can see you're
+    // carrying something without checking the status strip.
+    const bag = document.createElement('div');
+    bag.className = 'token-treasure-badge';
+    bag.textContent = '💰';
+    tok.appendChild(bag);
+  }
+  if (carryingBomb){
+    // Same idea as the Treasure badge, on the opposite corner, for Bombs picked up from an
+    // Armory.
+    const bomb = document.createElement('div');
+    bomb.className = 'token-bomb-badge';
+    bomb.textContent = '💣';
+    tok.appendChild(bomb);
+  }
+  cellDiv.appendChild(tok);
+}
+
+function renderEnemyGrid(){
+  const container = document.getElementById('enemyGrid');
+  container.style.gridTemplateColumns = `repeat(${SIZE}, 1fr)`;
+  container.innerHTML = '';
+  const known = state.human.knownMap;
+  const disoriented = !!known.activeFragment;
+
+  for (let r=0;r<SIZE;r++){
+    for (let c=0;c<SIZE;c++){
+      const info = known.cells[r][c];
+      const isUnknown = info.type === 'UNKNOWN';
+      const cls = isUnknown ? '' : classForType(info.type);
+      const label = isUnknown ? '' : publicLabel(info.type);
+      const cellDiv = makeCellDiv(cls, label, true);
+
+      if (state.debug){
+        const realType = state.enemyMap.cells[r][c].type;
+        cellDiv.title = 'REAL: ' + realType;
+        if (isUnknown){ cellDiv.style.outline = '1px dashed var(--danger)'; }
+      }
+
+      const marks = [];
+      ['UP','DOWN','LEFT','RIGHT'].forEach(dir => {
+        const ek = edgeKeyBetween(r,c,dir);
+        if (ek && known.knownWalls[ek]) marks.push({ dir, color: wallColorFor(known.knownWalls[ek]) });
+        // A wall bumped since the Exit appeared is the more useful fact to show — it takes
+        // priority over the older, more generic "this is the boundary" mark for the same edge.
+        if (known.checkedForExit[extKey(r,c,dir)]) marks.push({ dir, color: wallColorFor('CHECKED_FOR_EXIT') });
+        else if (known.checkedExternal[extKey(r,c,dir)]) marks.push({ dir, color: wallColorFor('CHECKED_EXTERNAL') });
+      });
+      if (known.exitKnown && known.exitKnown.r===r && known.exitKnown.c===c){
+        marks.push({ dir: known.exitKnown.dir, color: wallColorFor('EXIT') });
+      }
+      applyWallMarks(cellDiv, marks);
+      if (known.exitKnown && known.exitKnown.r===r && known.exitKnown.c===c){
+        addExitMarker(cellDiv, known.exitKnown.dir);
+      }
+
+      if (!disoriented && state.human.pos.r===r && state.human.pos.c===c){
+        const justArrived = isTeleportArrival(known, { kind:'real', r, c });
+        if (justArrived) cellDiv.classList.add('teleport-flash');
+        addToken(cellDiv, 'you', state.human.carrying.trueT || state.human.carrying.fakeT, state.human.hasBombs, justArrived);
+      }
+
+      // Route trail: while disoriented, show arrows (and a same-colored step number right next
+      // to each one) along the path walked up to (and including) the Hole you fell into, so you
+      // can see at a glance both where you left the main map AND the order you walked it in.
+      if (disoriented && known.trail && known.trail.length > 1){
+        const trailIdx = known.trail.findIndex(t => t.r===r && t.c===c);
+        if (trailIdx !== -1){
+          const isTrailEnd = trailIdx === known.trail.length - 1;
+          cellDiv.classList.add(isTrailEnd ? 'trail-end' : 'trail-cell');
+          let arrowDir = null;
+          if (!isTrailEnd){
+            const nxt = known.trail[trailIdx+1];
+            arrowDir = dirFromDelta(nxt.r-r, nxt.c-c);
+            if (arrowDir) addTrailArrow(cellDiv, arrowDir);
+          }
+          addTrailNumber(cellDiv, trailIdx + 1, isTrailEnd, arrowDir);
+        }
+      }
+
+      if (info.type === 'H'){
+        const ref = { kind:'real', r, c };
+        addHoleConnectHandle(cellDiv, ref, known);
+        if (holeLinkPending && refsEqual(holeLinkPending, ref)){
+          cellDiv.classList.add('hole-link-target-hover');
+        }
+      }
+
+      cellDiv.classList.add('clickable-anchor-target');
+      if (state.anchorSelection.target && state.anchorSelection.target.r===r && state.anchorSelection.target.c===c){
+        cellDiv.classList.add('anchor-target-selected');
+      }
+      if (pendingFailFlash && pendingFailFlash.targetKey === key(r,c)){
+        cellDiv.classList.add('anchor-fail');
+      }
+      cellDiv.addEventListener('click', () => onEnemyCellClick(r,c));
+
+      container.appendChild(cellDiv);
+    }
+  }
+}
+
+// ---- Hole-to-Hole route annotation: tap a Hole's handle to start a link, tap another Hole
+// (anywhere — the main map OR any puzzle fragment, even a different one) to fix it there.
+// Works identically with mouse clicks and touch taps. Tapping an existing arrow's line
+// removes it; since it also re-arms the FARTHER endpoint as a new pending source, tapping a
+// fresh Hole right after immediately "moves" that end of the arrow. Purely a personal sketch
+// — never read by any game logic.
+//
+// Each endpoint is a tagged reference, since a Hole inside an unanchored puzzle fragment only
+// has RELATIVE coordinates (its real position is exactly what's still unknown):
+//   { kind:'real', r, c }              — a Hole on the main map, real grid coordinates
+//   { kind:'frag', fragId, r, c }      — a Hole inside fragment #fragId, fragment-relative
+// When a fragment gets anchored (mergeFragment), any 'frag' refs pointing into it are rewritten
+// to 'real' refs at that point — the arrow itself is preserved, only its coordinate space
+// changes, exactly like the fragment's own cells do. ----
+let holeLinkPending = null;
+function refKey(ref){
+  return ref.kind === 'frag' ? `frag:${ref.fragId}:${ref.r},${ref.c}` : `real:${ref.r},${ref.c}`;
+}
+function refsEqual(a, b){ return refKey(a) === refKey(b); }
+
+function addHoleConnectHandle(cellDiv, ref, known){
+  cellDiv.dataset.holeRef = refKey(ref);
+  const handle = document.createElement('div');
+  handle.className = 'hole-connect-handle' + (holeLinkPending && refsEqual(holeLinkPending, ref) ? ' linking' : '');
+  handle.dataset.holeHandleRef = refKey(ref);
+  handle.textContent = '↗';
+  handle.title = 'Tap, then tap another Hole (on the map or in any puzzle) to mark a route between them';
+  handle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (holeLinkPending && refsEqual(holeLinkPending, ref)){
+      holeLinkPending = null; // tapped the same handle again: cancel
+    } else if (holeLinkPending){
+      toggleHoleArrow(known, holeLinkPending, ref);
+      holeLinkPending = null;
+    } else {
+      holeLinkPending = ref;
+    }
+    renderAll();
+  });
+  cellDiv.appendChild(handle);
+}
+function toggleHoleArrow(known, from, to){
+  const idx = known.holeArrows.findIndex(a =>
+    (refsEqual(a.from, from) && refsEqual(a.to, to)) || (refsEqual(a.from, to) && refsEqual(a.to, from))
+  );
+  if (idx !== -1) known.holeArrows.splice(idx, 1);
+  else known.holeArrows.push({ from: { ...from }, to: { ...to } });
+}
+
+// One shared SVG layer over the whole page (position:fixed), redrawn on every render — needed
+// because an arrow's two ends can live in completely separate DOM panels (main map vs. a
+// puzzle fragment card), so a single per-grid overlay can no longer reach both. Real screen
+// pixels via getBoundingClientRect, recomputed fresh every time, so it stays correct through
+// any layout change (resize, scroll, a fragment appearing/disappearing).
+function removeGlobalHoleArrowOverlay(){
+  const old = document.getElementById('globalHoleArrowOverlay');
+  if (old) old.remove();
+}
+function renderGlobalHoleArrowOverlay(){
+  removeGlobalHoleArrowOverlay();
+  if (!state || !state.human || document.getElementById('gameScreen').classList.contains('hidden')) return;
+  const known = state.human.knownMap;
+  if (!known.holeArrows || !known.holeArrows.length) return;
+
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.id = 'globalHoleArrowOverlay';
+  svg.classList.add('hole-arrow-overlay', 'hole-arrow-overlay-global');
+
+  const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+  const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+  marker.setAttribute('id', 'holeArrowHead');
+  // Sized to actually read as an arrowhead at a glance (not a faint dot at the line's end),
+  // then trimmed 20% smaller, then smaller again by another 20% on top of that so it stays
+  // proportionate to the small cells it points at.
+  marker.setAttribute('markerWidth', '16'); marker.setAttribute('markerHeight', '11.2');
+  marker.setAttribute('refX', '14.4'); marker.setAttribute('refY', '5.6'); marker.setAttribute('orient', 'auto');
+  const arrowPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  arrowPath.setAttribute('d', 'M0,0 L16,5.6 L0,11.2 L4,5.6 Z');
+  arrowPath.setAttribute('fill', 'var(--muted)');
+  marker.appendChild(arrowPath);
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+
+  known.holeArrows.forEach((a, i) => {
+    const elFromCell = document.querySelector(`[data-hole-ref="${CSS.escape(refKey(a.from))}"]`);
+    const elFromHandle = document.querySelector(`[data-hole-handle-ref="${CSS.escape(refKey(a.from))}"]`);
+    const elToCell = document.querySelector(`[data-hole-ref="${CSS.escape(refKey(a.to))}"]`);
+    if (!elFromCell || !elToCell) return; // e.g. a fragment currently scrolled out / not yet rendered
+    // The arrow starts from the little connect-handle circle in the Hole's corner (where the
+    // player actually "grabs" it from) and arrives at the CENTER of the destination Hole —
+    // makes the direction unambiguous even when several arrows meet at the same cell.
+    const rFrom = (elFromHandle || elFromCell).getBoundingClientRect(), rTo = elToCell.getBoundingClientRect();
+    const x1 = rFrom.left + rFrom.width/2, y1 = rFrom.top + rFrom.height/2;
+    const x2 = rTo.left + rTo.width/2, y2 = rTo.top + rTo.height/2;
+
+    const hit = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    hit.setAttribute('x1', x1); hit.setAttribute('y1', y1);
+    hit.setAttribute('x2', x2); hit.setAttribute('y2', y2);
+    hit.setAttribute('stroke', 'transparent');
+    hit.setAttribute('stroke-width', '10');
+    hit.style.pointerEvents = 'stroke';
+    hit.style.cursor = 'pointer';
+    hit.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const px = e.clientX, py = e.clientY;
+      const dFrom = Math.hypot(px - x1, py - y1);
+      const dTo = Math.hypot(px - x2, py - y2);
+      const keepEnd = dFrom < dTo ? a.to : a.from;
+      known.holeArrows.splice(i, 1);
+      holeLinkPending = keepEnd;
+      renderAll();
+    });
+    svg.appendChild(hit);
+
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    // Pull both ends in from the cell centers, so when two arrows share an endpoint (chained
+    // holes: A->B, B->C) their tip and tail don't sit exactly on top of one another — without
+    // a gap the arrowhead just vanishes into the next line's start.
+    const dx = x2 - x1, dy = y2 - y1;
+    const dist = Math.hypot(dx, dy) || 1;
+    const GAP = 14; // pixels, now that coordinates are real screen pixels rather than a 0-100 viewBox
+    const ux = dx / dist, uy = dy / dist;
+    line.setAttribute('x1', x1 + ux*GAP); line.setAttribute('y1', y1 + uy*GAP);
+    line.setAttribute('x2', x2 - ux*GAP); line.setAttribute('y2', y2 - uy*GAP);
+    line.setAttribute('marker-end', 'url(#holeArrowHead)');
+    svg.appendChild(line);
+  });
+  document.body.appendChild(svg);
+}
+
+function onEnemyCellClick(r,c){
+  const sel = state.anchorSelection;
+  if (sel.target && sel.target.r===r && sel.target.c===c){
+    sel.target = null;
+  } else {
+    sel.target = { r, c };
+  }
+  if (sel.target && sel.source) attemptAnchor();
+  else renderAll();
+}
+
+function renderHomeGrid(){
+  const container = document.getElementById('homeGrid');
+  container.style.gridTemplateColumns = `repeat(${SIZE}, 1fr)`;
+  container.innerHTML = '';
+  const map = state.homeMap;
+  const aiKnown = state.ai.knownMap;
+  for (let r=0;r<SIZE;r++){
+    for (let c=0;c<SIZE;c++){
+      const type = map.cells[r][c].type;
+      const cellDiv = makeCellDiv(classForType(type), homeLabel(type, r, c, map));
+
+      // Dim cells the AI hasn't discovered yet, so only what it actually knows stands out brightly.
+      const knownToAi = aiKnown.cells[r][c].type !== 'UNKNOWN';
+      if (!knownToAi) cellDiv.classList.add('ai-unknown');
+
+      const marks = [];
+      ['UP','DOWN','LEFT','RIGHT'].forEach(dir => {
+        const ek = edgeKeyBetween(r,c,dir);
+        if (ek && map.chainSet.has(ek)) marks.push({ dir, color: 'var(--wall-destructible)' });
+      });
+      if (map.exit && map.exit.r===r && map.exit.c===c){
+        marks.push({ dir: map.exit.dir, color: wallColorFor('EXIT') });
+      }
+      applyWallMarks(cellDiv, marks);
+      if (map.exit && map.exit.r===r && map.exit.c===c){
+        addExitMarker(cellDiv, map.exit.dir);
+      }
+
+      if (state.ai.pos.r===r && state.ai.pos.c===c){
+        addToken(cellDiv, 'enemy');
+      }
+      container.appendChild(cellDiv);
+    }
+  }
+}
+
+// ---- Puzzle quadrants (replaces the old "My Puzzles" tab) ----
+function computeUnanchoredFragments(known){
+  const list = known.fragments.filter(f => !f.anchored);
+  if (known.activeFragment) list.push(known.activeFragment);
+  return list;
+}
+// Lets a fragment card be freely dragged anywhere within the Puzzle Fragments canvas, by
+// grabbing the card ANYWHERE (not just the title strip) — that's what was actually broken:
+// only the thin title label used to be grabbable, so most attempts to "pick up" a block by
+// its body did nothing. Pointer events (not HTML5 drag-and-drop), so mouse and touch behave
+// identically. A small movement threshold distinguishes a real drag from a plain tap, so
+// clicking a cell (to anchor/merge) or a hole-label badge (to rename it) still works normally
+// when you're not actually dragging. Whichever card you press also jumps to the front, so
+// blocks that got stacked on top of each other can be pulled apart one at a time.
+function makeFragmentDraggable(wrap, frag, known){
+  wrap.style.cursor = 'grab';
+  let downAt = null, dragging = false, origLeft = 0, origTop = 0, pointerId = null, suppressClick = false;
+
+  wrap.addEventListener('pointerdown', (e) => {
+    // A press starting directly on a control with its own tap meaning (hole-label badge,
+    // hole-connect handle) is left alone entirely, so editing/connecting isn't ever delayed
+    // or hijacked by the drag-threshold check below.
+    if (e.target.closest('.hole-connect-handle')) return;
+    downAt = { x: e.clientX, y: e.clientY };
+    pointerId = e.pointerId;
+    origLeft = parseFloat(wrap.style.left) || 0;
+    origTop = parseFloat(wrap.style.top) || 0;
+  });
+  wrap.addEventListener('pointermove', (e) => {
+    if (!downAt || e.pointerId !== pointerId) return;
+    const dx = e.clientX - downAt.x, dy = e.clientY - downAt.y;
+    if (!dragging && Math.hypot(dx, dy) > 6){
+      dragging = true;
+      wrap.setPointerCapture(pointerId);
+      wrap.style.cursor = 'grabbing';
+      bringFragmentToFront(wrap, frag, known);
+    }
+    if (dragging){
+      wrap.style.left = (origLeft + dx) + 'px';
+      wrap.style.top = (origTop + dy) + 'px';
+      renderGlobalHoleArrowOverlay(); // keep any hole-arrows touching this fragment tracking live
+    }
+  });
+  function endDrag(e){
+    if (dragging){
+      suppressClick = true;
+      known.fragmentPositions[frag.id] = { x: parseFloat(wrap.style.left) || 0, y: parseFloat(wrap.style.top) || 0 };
+      wrap.style.cursor = 'grab';
+    } else if (downAt){
+      // A plain tap (no drag) still brings the card to front, so you can surface a block
+      // that's buried under others without having to drag it first.
+      bringFragmentToFront(wrap, frag, known);
+    }
+    downAt = null; dragging = false; pointerId = null;
+  }
+  wrap.addEventListener('pointerup', endDrag);
+  wrap.addEventListener('pointercancel', endDrag);
+  // Capture phase, so this runs BEFORE any cell's own tap-to-select click listener — swallows
+  // the click that a drag's pointerup would otherwise also fire, so a drag never accidentally
+  // also registers as an anchor/merge selection.
+  wrap.addEventListener('click', (e) => {
+    if (suppressClick){ suppressClick = false; e.stopImmediatePropagation(); e.preventDefault(); }
+  }, true);
+}
+// Raises one fragment card above all others (both visually and in known.fragmentZ, so the
+// order survives the next re-render) — lets overlapping blocks be separated one at a time.
+function bringFragmentToFront(wrap, frag, known){
+  known.topFragmentZ = (known.topFragmentZ || 1) + 1;
+  known.fragmentZ = known.fragmentZ || {};
+  known.fragmentZ[frag.id] = known.topFragmentZ;
+  wrap.style.zIndex = String(known.topFragmentZ);
+}
+
+// Finds the first free slot (scanning left-to-right, top-to-bottom in a coarse grid) whose
+// box doesn't overlap any already-placed fragment's actual current rectangle — used to give a
+// brand-new puzzle fragment its own clear spot on the canvas instead of landing on top of one
+// the player has already dragged somewhere.
+function findFreeFragmentSpot(placedRects, w, h, containerWidth){
+  const PAD = 16, STEP = 24;
+  const maxX = Math.max(containerWidth - w - PAD, PAD);
+  for (let y = PAD; y < 20000; y += STEP){
+    for (let x = PAD; x <= maxX + STEP; x += STEP){
+      const cx = Math.min(x, maxX);
+      const overlaps = placedRects.some(r =>
+        cx < r.x + r.w + PAD && cx + w + PAD > r.x &&
+        y  < r.y + r.h + PAD && y  + h + PAD > r.y
+      );
+      if (!overlaps) return { x: cx, y };
+      if (cx === maxX) break; // reached the right edge for this row — drop to the next one
+    }
+  }
+  return { x: PAD, y: PAD }; // pathological fallback, should never actually be reached
+}
+
+function buildFragmentQuadrant(frag, known){
+  const isActive = known.activeFragment === frag;
+  const wrap = document.createElement('div');
+  wrap.className = 'quadrant';
+
+  const title = document.createElement('div');
+  title.className = 'quadrant-title';
+  title.innerHTML = `<span>Puzzle #${frag.id}${isActive ? ' (current)' : ''}</span>`;
+  wrap.appendChild(title);
+
+  let minR=0,maxR=0,minC=0,maxC=0;
+  frag.nodes.forEach(n => { minR=Math.min(minR,n.r); maxR=Math.max(maxR,n.r); minC=Math.min(minC,n.c); maxC=Math.max(maxC,n.c); });
+  // Tight bounding box around the actually-explored cells — NOT forced square/symmetric
+  // around the entry point. Forcing symmetry meant exploring even a single straight line far
+  // in one direction (e.g. 6 cells east) ballooned the box into a giant mostly-empty square
+  // (13x13 for that example) just to keep the unused mirror side balanced. A card should be
+  // exactly as big as what you've actually uncovered, nothing more.
+  const rows = maxR-minR+1, cols = maxC-minC+1;
+
+  const miniGrid = document.createElement('div');
+  miniGrid.className = 'grid'; // NOTE: must NOT also carry the 'quadrant' class — that class
+  // sets display:flex on the wrapper box and, if applied here too, silently overrides the
+  // display:grid this element needs, breaking the whole cell layout.
+  // Fixed, comfortable per-cell size — NOT tied to the main map's cell size. On a wide desktop
+  // screen the main grid's cells can be very large, and matching that made even a small
+  // fragment balloon far past what its actual content needed, leaving a lot of dead space
+  // around a few tiny cells. A fixed size (clamped to the panel width via max-width) keeps
+  // fragments compact and consistent regardless of how big the main map happens to be.
+  const FRAGMENT_CELL_PX = 69;
+  const FRAGMENT_MAX_PX = 450;
+  const actualCellPx = Math.min(FRAGMENT_CELL_PX, FRAGMENT_MAX_PX / cols);
+  // Cells are positioned absolutely within this box at fixed slots (not individually
+  // draggable — only the fragment card as a whole moves, via its title bar handle in
+  // makeFragmentDraggable, so a puzzle block's internal geometry always stays intact).
+  miniGrid.style.position = 'relative';
+  miniGrid.style.width = Math.min(cols * actualCellPx, FRAGMENT_MAX_PX) + 'px';
+  miniGrid.style.height = (rows * actualCellPx) + 'px';
+  miniGrid.style.maxWidth = '100%';
+  miniGrid.style.margin = '0 auto';
+  miniGrid.style.overflow = 'visible';
+
+  const nodeAt = {};
+  frag.nodes.forEach(n => { nodeAt[key(n.r,n.c)] = n; });
+
+  for (let rr=minR; rr<=maxR; rr++){
+    for (let cc=minC; cc<=maxC; cc++){
+      const node = nodeAt[key(rr,cc)];
+      let cellDiv;
+      if (!node){
+        cellDiv = makeCellDiv('fragment-gap', '');
+      } else {
+        const cls = classForType(node.type);
+        cellDiv = makeCellDiv(cls, publicLabel(node.type));
+        cellDiv.classList.add('fragment-node');
+
+        if (!frag.anchored){
+          cellDiv.classList.add('clickable');
+          const sel = state.anchorSelection;
+          if (!state.mergeMode && sel.source && sel.source.fragment===frag && sel.source.node===node){
+            cellDiv.classList.add('anchor-source-selected');
+          }
+          if (state.mergeMode && state.mergeSelection && state.mergeSelection.fragment===frag && state.mergeSelection.node===node){
+            cellDiv.classList.add('merge-source-selected');
+          }
+          if (pendingFailFlash && pendingFailFlash.fragmentId===frag.id && pendingFailFlash.nodeKey===key(node.r,node.c)){
+            cellDiv.classList.add('anchor-fail');
+          }
+          if (pendingMergeFailFlash){
+            const nk = key(node.r,node.c);
+            if ((pendingMergeFailFlash.a.fragmentId===frag.id && pendingMergeFailFlash.a.nodeKey===nk) ||
+                (pendingMergeFailFlash.b.fragmentId===frag.id && pendingMergeFailFlash.b.nodeKey===nk)){
+              cellDiv.classList.add('anchor-fail');
+            }
+          }
+          cellDiv.addEventListener('click', () => onFragmentNodeClick(frag, node));
+        }
+
+        const marks = [];
+        frag.edges.forEach(e => {
+          if (e.r===node.r && e.c===node.c) marks.push({ dir: e.dir, color: wallColorFor(e.status) });
+        });
+        applyWallMarks(cellDiv, marks);
+        const exitEdge = frag.edges.find(e => e.r===node.r && e.c===node.c && e.status==='EXIT');
+        if (exitEdge) addExitMarker(cellDiv, exitEdge.dir);
+
+        if (isActive && frag.cursor.r===node.r && frag.cursor.c===node.c){
+          const justArrived = isTeleportArrival(known, { kind:'frag', fragId: frag.id, r: node.r, c: node.c });
+          if (justArrived) cellDiv.classList.add('teleport-flash');
+          addToken(cellDiv, 'you', state.human.carrying.trueT || state.human.carrying.fakeT, state.human.hasBombs, justArrived);
+        }
+
+        if (node.type === 'H' && !frag.anchored){
+          const ref = { kind:'frag', fragId: frag.id, r: node.r, c: node.c };
+          addHoleConnectHandle(cellDiv, ref, known);
+          if (holeLinkPending && refsEqual(holeLinkPending, ref)){
+            cellDiv.classList.add('hole-link-target-hover');
+          }
+        }
+      }
+
+      // Position this cell at its fixed slot in the fragment's local grid, with a small
+      // inset to keep the gap look. Cells no longer carry per-cell drag — only the whole
+      // fragment card moves, so its internal layout (and the hole-arrow anchors into it)
+      // never drifts out of sync with itself.
+      const x = (cc-minC)*actualCellPx, y = (rr-minR)*actualCellPx;
+      cellDiv.style.position = 'absolute';
+      cellDiv.style.left = (x+1.5) + 'px';
+      cellDiv.style.top = (y+1.5) + 'px';
+      cellDiv.style.width = (actualCellPx-3) + 'px';
+      cellDiv.style.height = (actualCellPx-3) + 'px';
+
+      miniGrid.appendChild(cellDiv);
+    }
+  }
+  wrap.appendChild(miniGrid);
+  return wrap;
+}
+
+function onFragmentNodeClick(fragment, node){
+  if (fragment.anchored) return;
+
+  if (state.mergeMode){
+    const sel = state.mergeSelection;
+    if (sel && sel.fragment === fragment && sel.node === node){
+      state.mergeSelection = null; // deselect
+      renderAll();
+      return;
+    }
+    if (!sel){
+      state.mergeSelection = { fragment, node };
+      renderAll();
+      return;
+    }
+    if (sel.fragment === fragment){
+      // Re-picking within the same fragment just moves the selection.
+      state.mergeSelection = { fragment, node };
+      renderAll();
+      return;
+    }
+    attemptMergeFragments(sel, { fragment, node });
+    return;
+  }
+
+  const sel = state.anchorSelection;
+  if (sel.source && sel.source.fragment===fragment && sel.source.node===node){
+    sel.source = null;
+  } else {
+    sel.source = { fragment, node };
+  }
+  if (sel.target && sel.source) attemptAnchor();
+  else renderAll();
+}
+
+// ============================================================
+// PUZZLE FRAGMENT MERGING (manual, player-driven; no auto-solve)
+// The player doesn't know where either fragment sits on the real map, but if they believe
+// they walked over the same real cell in both, they can claim that cell is shared. The game
+// validates the claim silently against each fragment's hidden secretOrigin (same honesty rule
+// as anchoring) — right, and the two fragments combine into one; wrong, nothing changes beyond
+// a visual flash, no hint given.
+// ============================================================
+function attemptMergeFragments(selA, selB){
+  const { fragment: fragA, node: nodeA } = selA;
+  const { fragment: fragB, node: nodeB } = selB;
+  const known = state.human.knownMap;
+
+  const realA = { r: fragA.secretOrigin.r + nodeA.r, c: fragA.secretOrigin.c + nodeA.c };
+  const realB = { r: fragB.secretOrigin.r + nodeB.r, c: fragB.secretOrigin.c + nodeB.c };
+  const correct = realA.r === realB.r && realA.c === realB.c;
+
+  if (!correct){
+    flashMergeFail(selA, selB);
+    state.mergeSelection = null;
+    renderAll();
+    return;
+  }
+
+  // Offset that converts fragB's local coordinates into fragA's coordinate frame.
+  const dr = nodeA.r - nodeB.r;
+  const dc = nodeA.c - nodeB.c;
+
+  fragB.nodes.forEach(n => {
+    const tr = n.r+dr, tc = n.c+dc;
+    const existing = fragA.nodes.find(x => x.r===tr && x.c===tc);
+    if (existing){
+      if (!existing.personalLabel && n.personalLabel) existing.personalLabel = n.personalLabel;
+    } else {
+      fragA.nodes.push({ r: tr, c: tc, type: n.type, personalLabel: n.personalLabel });
+    }
+  });
+  fragB.edges.forEach(e => {
+    const tr = e.r+dr, tc = e.c+dc;
+    const dup = fragA.edges.some(x => x.r===tr && x.c===tc && x.dir===e.dir);
+    if (!dup) fragA.edges.push({ r: tr, c: tc, dir: e.dir, status: e.status });
+  });
+
+  const wasBActive = known.activeFragment === fragB;
+  if (wasBActive){
+    fragA.cursor = { r: fragB.cursor.r+dr, c: fragB.cursor.c+dc };
+    known.activeFragment = fragA;
+  }
+  known.fragments = known.fragments.filter(f => f !== fragB);
+
+  log('Puzzle #' + fragA.id + ' and #' + fragB.id + ' merged — same real cell confirmed.', 'important');
+  state.mergeSelection = null;
+  renderAll();
+}
+
+let pendingMergeFailFlash = null; // {fragmentIdA, nodeKeyA, fragmentIdB, nodeKeyB} briefly, one render pass
+function flashMergeFail(selA, selB){
+  pendingMergeFailFlash = {
+    a: { fragmentId: selA.fragment.id, nodeKey: key(selA.node.r, selA.node.c) },
+    b: { fragmentId: selB.fragment.id, nodeKey: key(selB.node.r, selB.node.c) },
+  };
+  setTimeout(() => { pendingMergeFailFlash = null; renderAll(); }, 500);
+}
+
+function renderBoardArea(){
+  renderEnemyGrid();
+  const known = state.human.knownMap;
+  const fragments = computeUnanchoredFragments(known);
+
+  const puzzleContainer = document.getElementById('puzzleQuadrants');
+  puzzleContainer.innerHTML = '';
+
+  // Pass 1: build every fragment card in normal flow just to measure its natural size (NOT
+  // to use flex flow as its position — see Pass 2).
+  const built = fragments.map(frag => ({ frag, wrap: buildFragmentQuadrant(frag, known) }));
+  built.forEach(({wrap}) => puzzleContainer.appendChild(wrap));
+
+  // Pass 2: convert every card to a freely-draggable, absolutely-positioned element. A card
+  // that already has a saved position (the player dragged it, or it was placed by this same
+  // logic before) keeps that spot untouched. A BRAND-NEW card (just-created fragment, no saved
+  // spot yet) gets slotted into the first free area that doesn't overlap any other card's
+  // actual current rectangle — never just dropped wherever normal document flow would have
+  // put it, which could land it right on top of a card the player had dragged elsewhere.
+  const containerRect = puzzleContainer.getBoundingClientRect();
+  const containerWidth = puzzleContainer.clientWidth || containerRect.width || 900;
+  let maxBottom = 0;
+  const placedRects = []; // {x,y,w,h} of every card positioned so far this pass
+
+  const withStored = built.filter(b => known.fragmentPositions[b.frag.id]);
+  const brandNew    = built.filter(b => !known.fragmentPositions[b.frag.id]);
+
+  withStored.forEach(({frag, wrap}) => {
+    const pos = known.fragmentPositions[frag.id];
+    const r = wrap.getBoundingClientRect();
+    placedRects.push({ x: pos.x, y: pos.y, w: r.width, h: r.height });
+  });
+  brandNew.forEach(({frag, wrap}) => {
+    const r = wrap.getBoundingClientRect();
+    const spot = findFreeFragmentSpot(placedRects, r.width, r.height, containerWidth);
+    known.fragmentPositions[frag.id] = spot;
+    placedRects.push({ x: spot.x, y: spot.y, w: r.width, h: r.height });
+  });
+
+  built.forEach(({frag, wrap}) => {
+    const stored = known.fragmentPositions[frag.id];
+    const r = wrap.getBoundingClientRect();
+    wrap.style.position = 'absolute';
+    wrap.style.left = stored.x + 'px';
+    wrap.style.top = stored.y + 'px';
+    wrap.style.margin = '0';
+    wrap.style.zIndex = String((known.fragmentZ && known.fragmentZ[frag.id]) || 1);
+    maxBottom = Math.max(maxBottom, stored.y + r.height);
+    makeFragmentDraggable(wrap, frag, known);
+  });
+  puzzleContainer.style.minHeight = built.length ? Math.max(maxBottom + 20, 260) + 'px' : '';
+
+  document.getElementById('puzzleEmptyMsg').classList.toggle('hidden', fragments.length > 0);
+
+  const mergeBtn = document.getElementById('mergeToggleBtn');
+  const canMerge = fragments.length >= 2;
+  mergeBtn.disabled = !canMerge && !state.mergeMode;
+  mergeBtn.classList.toggle('active', state.mergeMode);
+  mergeBtn.textContent = state.mergeMode ? '✕ Cancel merge' : '🔗 Merge';
+  document.getElementById('mergeHint').classList.toggle('hidden', !state.mergeMode);
+}
+
+function renderStatus(){
+  const p = state.human;
+  document.getElementById('statBombs').textContent = p.hasBombs ? 'yes' : 'no';
+  document.getElementById('statBombs').className = 'value ' + (p.hasBombs?'yes':'no');
+  const carrying = [];
+  if (p.carrying.trueT) carrying.push('Tr');
+  if (p.carrying.fakeT) carrying.push('Tr');
+  document.getElementById('statTreasure').textContent = carrying.length ? carrying.join('+') : 'no';
+  document.getElementById('statTreasure').className = 'value ' + (carrying.length?'yes':'no');
+  document.getElementById('statSkip').textContent = p.skipNextTurn ? 'yes' : 'no';
+  document.getElementById('statSkip').className = 'value ' + (p.skipNextTurn?'yes':'no');
+  document.getElementById('statMoves').textContent = p.movesExploring + ' · ' + p.movesToExit;
+}
+
+function renderMessages(){
+  const container = document.getElementById('messages');
+  container.innerHTML = state.messages.map(m => `<div class="msg ${m.cls}">${m.text}</div>`).join('');
+}
+
+function computeAiProgressPct(){
+  const known = state.ai.knownMap;
+  let seen = 0;
+  const total = SIZE * SIZE;
+  for (let r=0;r<SIZE;r++){
+    for (let c=0;c<SIZE;c++){
+      if (known.cells[r][c].type !== 'UNKNOWN') seen++;
+    }
+  }
+  return Math.round(100 * seen / total);
+}
+
+function computeHumanProgressPct(){
+  // Counts cells confirmed on the oriented main map only — cells seen while disoriented
+  // (still sitting in an unanchored fragment) aren't placed on the real grid yet, so they
+  // don't count as "explored" until you've actually figured out where they are.
+  const known = state.human.knownMap;
+  let seen = 0;
+  const total = SIZE * SIZE;
+  for (let r=0;r<SIZE;r++){
+    for (let c=0;c<SIZE;c++){
+      if (known.cells[r][c].type !== 'UNKNOWN') seen++;
+    }
+  }
+  return Math.round(100 * seen / total);
+}
+
+function renderAiInfoBar(){
+  const lastAiMsg = state.messages.find(m => m.text.startsWith('AI:'));
+  document.getElementById('aiLastAction').textContent = lastAiMsg ? lastAiMsg.text : "AI hasn't moved yet";
+  const pct = computeAiProgressPct();
+  document.getElementById('aiProgressPct').textContent = pct + '%';
+  document.getElementById('aiProgressFill').style.width = pct + '%';
+  const hPct = computeHumanProgressPct();
+  document.getElementById('humanProgressPct').textContent = hPct + '%';
+  document.getElementById('humanProgressFill').style.width = hPct + '%';
+}
+
+function renderTurnIndicator(){
+  const el = document.getElementById('turnIndicator');
+  if (state.turn === 'HUMAN'){ el.textContent = 'Your turn'; el.className='turn-indicator human'; }
+  else { el.textContent = "AI's turn..."; el.className='turn-indicator ai'; }
+  document.querySelectorAll('.ctrl-btn').forEach(b => b.disabled = (state.turn !== 'HUMAN') || state.gameOver || eventModalQueue.length>0);
+}
+
+function renderAll(){
+  if (!state) return;
+  checkExitReveal();
+  renderBoardArea();
+  renderHomeGrid();
+  renderStatus();
+  renderMessages();
+  renderAiInfoBar();
+  renderTurnIndicator();
+  renderGlobalHoleArrowOverlay();
+}
+
+function showGameOver(winner){
+  document.getElementById('gameScreen').classList.add('hidden');
+  removeGlobalHoleArrowOverlay(); // the board holding its cells is now hidden — nothing left for the arrows to anchor to
+  const el = document.getElementById('gameOverScreen');
+  el.classList.remove('hidden');
+  document.getElementById('gameOverTitle').textContent = winner==='HUMAN' ? '🏆 You won!' : '💀 AI won';
+  document.getElementById('gameOverText').textContent = winner==='HUMAN'
+    ? 'You carried the real Treasure to the Exit before your opponent.'
+    : "The AI carried the real Treasure to its Exit before you did. Try again!";
+  const p = state.human;
+  document.getElementById('gameOverStats').textContent =
+    `Your moves — exploring: ${p.movesExploring}, racing to the Exit: ${p.movesToExit} (total ${p.movesExploring + p.movesToExit}).`;
+}
+
+// ============================================================
+// UI WIRING
+// ============================================================
+let selectedCorner = null;
+let selectedDiff = 1;
+let selectedSize = 5;
+
+const DIFF_HINTS = {
+  1: 'Easy: the Exit is never on a Hole.',
+  2: 'Normal: the Exit can be on a Hole, but never on a Treasure.',
+};
+
+document.querySelectorAll('.size-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.size-btn').forEach(b=>b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedSize = parseInt(btn.dataset.size, 10);
+  });
+});
+document.querySelectorAll('.corner-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.corner-btn').forEach(b=>b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedCorner = btn.dataset.corner;
+    document.getElementById('startBtn').disabled = false;
+  });
+});
+document.querySelectorAll('.diff-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.diff-btn').forEach(b=>b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedDiff = parseInt(btn.dataset.diff, 10);
+    document.getElementById('diffHint').textContent = DIFF_HINTS[selectedDiff];
+  });
+});
+document.getElementById('startBtn').addEventListener('click', () => {
+  initGame(selectedCorner, selectedDiff, selectedSize);
+  document.getElementById('setupScreen').classList.add('hidden');
+  document.getElementById('gameScreen').classList.remove('hidden');
+  renderAll();
+});
+document.querySelectorAll('.ctrl-btn').forEach(btn => {
+  btn.addEventListener('click', () => humanMove(btn.dataset.dir));
+});
+document.addEventListener('keydown', (e) => {
+  const map = { ArrowUp:'UP', ArrowDown:'DOWN', ArrowLeft:'LEFT', ArrowRight:'RIGHT' };
+  if (map[e.key] && document.getElementById('gameScreen').classList.contains('hidden')===false){
+    humanMove(map[e.key]);
+  }
+});
+document.getElementById('debugToggle').addEventListener('click', (e) => {
+  state.debug = !state.debug;
+  e.target.textContent = 'Debug: ' + (state.debug ? 'on' : 'off');
+  renderAll();
+});
+
+// ---- Legend toggle ----
+document.getElementById('legendToggle').addEventListener('click', () => {
+  document.getElementById('legendBox').classList.toggle('hidden');
+});
+
+// ---- Reset the puzzle panel: discards every OTHER unresolved puzzle fragment, keeping only
+// the one you're currently standing in (if any) — a deliberate "forget the old branches,
+// focus on where I am now" action, not just a layout tidy-up. Also drops any hand-drawn
+// hole-arrows that pointed into a fragment that just got discarded, so no arrow is left
+// dangling at a piece that no longer exists. ----
+document.getElementById('resetLayoutBtn').addEventListener('click', () => {
+  const known = state.human.knownMap;
+  const keptIds = new Set(known.activeFragment ? [known.activeFragment.id] : []);
+  const discardedAny = known.fragments.some(f => !f.anchored && !keptIds.has(f.id));
+  if (discardedAny && !confirm('This removes every unresolved puzzle piece except the one you\'re currently in. Anchored pieces already placed on the map are unaffected. Continue?')) return;
+  known.fragments = known.fragments.filter(f => f.anchored || keptIds.has(f.id));
+  if (known.holeArrows){
+    known.holeArrows = known.holeArrows.filter(a =>
+      (a.from.kind !== 'frag' || keptIds.has(a.from.fragId)) &&
+      (a.to.kind !== 'frag' || keptIds.has(a.to.fragId))
+    );
+  }
+  known.fragmentPositions = {};
+  known.fragmentZ = {};
+  known.topFragmentZ = 1;
+  renderAll();
+});
+
+// ---- Fragment merge mode toggle ----
+document.getElementById('mergeToggleBtn').addEventListener('click', () => {
+  state.mergeMode = !state.mergeMode;
+  state.mergeSelection = null;
+  state.anchorSelection = { target: null, source: null }; // avoid cross-mode selection clashes
+  renderAll();
+});
+
+// ---- Event popups on/off toggle ----
+document.getElementById('eventPopupsToggle').addEventListener('click', () => {
+  setEventPopupsEnabled(!eventPopupsEnabled);
+});
+updateEventPopupsToggleLabel();
+
+// ---- Rules preview screen (shown before every game) ----
+let rulesReturnTarget = 'setup'; // 'setup' (first-time/new game flow) or 'game' (opened mid-game via help button)
+document.getElementById('rulesContinueBtn').addEventListener('click', () => {
+  document.getElementById('rulesScreen').classList.add('hidden');
+  if (rulesReturnTarget === 'game'){
+    document.getElementById('gameScreen').classList.remove('hidden');
+  } else {
+    document.getElementById('setupScreen').classList.remove('hidden');
+  }
+});
+document.getElementById('helpBtn').addEventListener('click', () => {
+  rulesReturnTarget = 'game';
+  document.getElementById('gameScreen').classList.add('hidden');
+  document.getElementById('rulesScreen').classList.remove('hidden');
+});
+
+function resetToSetup(){
+  rulesReturnTarget = 'setup';
+  document.getElementById('gameScreen').classList.add('hidden');
+  document.getElementById('gameOverScreen').classList.add('hidden');
+  document.getElementById('setupScreen').classList.add('hidden');
+  document.getElementById('rulesScreen').classList.remove('hidden');
+  removeGlobalHoleArrowOverlay();
+}
+document.getElementById('restartBtn').addEventListener('click', resetToSetup);
+document.getElementById('playAgainBtn').addEventListener('click', resetToSetup);
+
+// The hole-arrow overlay is drawn from getBoundingClientRect() snapshots, so anything that
+// moves the page (or a scrollable panel inside it) without going through renderAll() — like
+// scrolling, or resizing the window — leaves it stale, hovering over where the cells USED to
+// be. Redraw on both; capture:true so it also catches scrolling inside any inner panel, not
+// just the page itself (scroll doesn't bubble, but the capture phase still reaches it).
+let arrowOverlayRAF = null;
+function scheduleArrowOverlayRedraw(){
+  if (arrowOverlayRAF) return;
+  arrowOverlayRAF = requestAnimationFrame(() => {
+    arrowOverlayRAF = null;
+    renderGlobalHoleArrowOverlay();
+  });
+}
+window.addEventListener('scroll', scheduleArrowOverlayRedraw, { capture: true, passive: true });
+window.addEventListener('resize', scheduleArrowOverlayRedraw, { passive: true });
+</script>
+</body>
+</html>
